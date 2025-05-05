@@ -2689,6 +2689,7 @@ dependencies = [
  "bevy_mod_openxr",
  "bevy_mod_xr",
  "openxr",
+ "schminput",
 ]
 
 [[package]]
@@ -3646,6 +3647,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "schminput"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ea812150f3b5d2e513cdd050c59a2d55433a55b6504134c0972073e51c42c2e"
+dependencies = [
+ "atomicow",
+ "bevy",
+ "bevy_mod_openxr",
+ "bevy_mod_xr",
+ "openxr",
 ]
 
 [[package]]

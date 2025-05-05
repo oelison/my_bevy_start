@@ -8,4 +8,5 @@ bevy = { version = "0.15.3", features = ["jpeg"] }
 bevy_mod_openxr = "0.2.1"
 bevy_mod_xr = "0.2.1"
 openxr = "0.19.0"
+schminput = "0.2.0"
 

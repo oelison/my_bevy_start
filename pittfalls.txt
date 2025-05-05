@@ -1,0 +1,4 @@
+025-05-04T20:49:39.847492Z  WARN bevy_mod_openxr::openxr::features::handtracking: Error while creating Handtracker: the requested feature is not supported
+XR_ERROR_PATH_UNSUPPORTED: xrSuggestInteractionProfileBindings(suggestedBindings->interactionProfile == "/interaction_profiles/hp/mixed_reality_controller") used but XR_EXT_hp_mixed_reality_controller not enabled
+
+Have you enabled the XR_EXT_hp_mixed_reality_controller extension when you call the xrCreateInstance function?

@@ -4,12 +4,38 @@
 // The example includes a simple setup for a Bevy app with OpenXR integration.
 
 use bevy::{
-    prelude::*, render::pipelined_rendering::PipelinedRenderingPlugin, scene::SceneInstanceReady, 
+    prelude::*, 
+    render::pipelined_rendering::PipelinedRenderingPlugin, 
+    scene::SceneInstanceReady,
+    color::palettes::css,
 };
-use bevy_mod_openxr::{add_xr_plugins, init::OxrInitPlugin};
+use bevy_mod_openxr::{add_xr_plugins, exts::OxrExtensions, init::OxrInitPlugin};
 
 use openxr::EnvironmentBlendMode;
 use bevy::prelude::MorphWeights;
+use schminput::prelude::*;
+
+#[derive(Component, Clone, Copy)]
+struct HandLeft;
+#[derive(Component, Clone, Copy)]
+struct HandRight;
+
+#[allow(dead_code)]
+#[derive(Resource, Clone, Copy)]
+struct CoreActions {
+    set: Entity,
+    left_pose: Entity,
+    right_pose: Entity,
+}
+
+#[allow(dead_code)]
+#[derive(Resource, Clone, Copy)]
+struct MoveActions {
+    set: Entity,
+    move_action: Entity,
+    look: Entity,
+    jump: Entity,
+}
 
 const GLTF_PATH: &str = "simpleHumanRig.glb";
 
@@ -26,6 +52,11 @@ fn main() {
         .add_plugins(
             add_xr_plugins(DefaultPlugins.build().disable::<PipelinedRenderingPlugin>()).set(
                 OxrInitPlugin {
+                    exts: {
+                        let mut exts = OxrExtensions::default();
+                        exts.ext_hp_mixed_reality_controller = true;
+                        exts
+                    },
                     blend_modes: Some(vec![
                         EnvironmentBlendMode::ALPHA_BLEND,
                         EnvironmentBlendMode::ADDITIVE,
@@ -35,9 +66,12 @@ fn main() {
                 },
             ),
         )
+        .add_plugins(schminput::DefaultSchminputPlugins)
         .add_systems(Startup, setup_mesh_and_animation)
         .add_systems(Startup, setup)
+        .add_systems(Startup, setup2)
         .add_systems(Update, update_morph_targets)
+        .add_systems(Update, run)
         .insert_resource(ClearColor(Color::NONE))
         .run();
 }
@@ -72,6 +106,68 @@ fn setup_mesh_and_animation(
     commands
         .spawn((animation_to_play, mesh_scene))
         .observe(play_animation_when_ready);
+}
+
+fn setup2(mut cmds: Commands) {
+    let player_set = cmds.spawn(ActionSet::new("player", "Player", 1)).id();
+    let pose_set = cmds.spawn(ActionSet::new("pose", "Poses", 0)).id();
+    let move_action = cmds
+        .spawn((
+            Action::new("move", "Move", player_set),
+            OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/thumbstick"]),
+            Vec2ActionValue::new(),
+        ))
+        .id();
+    let look = cmds
+        .spawn((
+            Action::new("look", "Look", player_set),
+            OxrBindings::new().bindngs(
+                "/interaction_profiles/hp/mixed_reality_controller",
+                ["/user/hand/right/input/thumbstick/x"],
+            ),
+            F32ActionValue::new(),
+        ))
+        .id();
+    let jump = cmds
+        .spawn((
+            Action::new("jump", "Jump", player_set),
+            OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/a/click"]),
+            KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::Space)),
+            GamepadBindings::new()
+                .bind(GamepadBinding::new(GamepadBindingSource::South).button_just_pressed()),
+            BoolActionValue::new(),
+        ))
+        .id();
+    let left_hand = cmds.spawn(HandLeft).id();
+
+    let right_hand = cmds.spawn(HandRight).id();
+    let left_pose = cmds
+        .spawn((
+            Action::new("hand_left_pose", "Left Hand Pose", pose_set),
+            OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/grip/pose"]),
+            AttachSpaceToEntity(left_hand),
+            SpaceActionValue::new(),
+        ))
+        .id();
+    let right_pose = cmds
+        .spawn((
+            Action::new("hand_right_pose", "Right Hand Pose", pose_set),
+            OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/aim/pose"]),
+            AttachSpaceToEntity(right_hand),
+            SpaceActionValue::new(),
+        ))
+        .id();
+    cmds.insert_resource(MoveActions {
+        set: player_set,
+        move_action,
+        look,
+        jump,
+    });
+    cmds.insert_resource(CoreActions {
+        set: pose_set,
+        left_pose,
+        right_pose,
+    });
 }
 
 fn setup(
@@ -145,5 +241,30 @@ fn play_animation_when_ready(
                     .insert(AnimationGraphHandle(animation_to_play.graph_handle.clone()));
             }
         }
+    }
+}
+
+fn run(
+    move_actions: Res<MoveActions>,
+    vec2_value: Query<&Vec2ActionValue>,
+    f32_value: Query<&F32ActionValue>,
+    bool_value: Query<&BoolActionValue>,
+    left_hand: Query<&GlobalTransform, With<HandLeft>>,
+    right_hand: Query<&GlobalTransform, With<HandRight>>,
+    mut gizmos: Gizmos,
+) {
+    info!(
+        "move: {}",
+        vec2_value.get(move_actions.move_action).unwrap().any
+    );
+    info!("look: {}", f32_value.get(move_actions.look).unwrap().any);
+    info!("jump: {}", bool_value.get(move_actions.jump).unwrap().any);
+    for hand in left_hand.into_iter() {
+        let pose = hand.to_isometry();
+        gizmos.sphere(pose, 0.1, css::ORANGE_RED);
+    }
+    for hand in right_hand.into_iter() {
+        let pose = hand.to_isometry();
+        gizmos.sphere(pose, 0.1, css::LIMEGREEN);
     }
 }
