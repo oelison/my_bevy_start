@@ -3,6 +3,8 @@
 // The model is loaded from a file and displayed in a VR environment.
 // The example includes a simple setup for a Bevy app with OpenXR integration.
 
+use std::f32::consts::FRAC_PI_4;
+
 use bevy::{
     prelude::*, 
     render::pipelined_rendering::PipelinedRenderingPlugin, 
@@ -34,8 +36,15 @@ struct CoreActions {
 struct MoveActions {
     set: Entity,
     move_action: Entity,
+    turn_action: Entity,
     look: Entity,
     jump: Entity,
+}
+
+// Zustand für Turn-steuerung
+#[derive(Resource, Default)]
+struct TurnState {
+    ready: bool,
 }
 
 const GLTF_PATH: &str = "simpleHumanRig.glb";
@@ -73,7 +82,9 @@ fn main() {
         .add_systems(Startup, setup2)
         .add_systems(Update, update_morph_targets)
         .add_systems(Update, run)
+        .add_systems(Update, snap_turn_system)
         .insert_resource(ClearColor(Color::NONE))
+        .insert_resource(TurnState::default()) 
         .run();
 }
 
@@ -119,6 +130,13 @@ fn setup2(mut cmds: Commands) {
             Vec2ActionValue::new(),
         ))
         .id();
+    let turn_action = cmds
+        .spawn((
+            Action::new("turn", "Turn", player_set),
+            OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/thumbstick"]),
+            Vec2ActionValue::new(),
+        ))
+        .id();
     let look = cmds
         .spawn((
             Action::new("look", "Look", player_set),
@@ -161,6 +179,7 @@ fn setup2(mut cmds: Commands) {
     cmds.insert_resource(MoveActions {
         set: player_set,
         move_action,
+        turn_action,
         look,
         jump,
     });
@@ -286,5 +305,31 @@ fn run(
             let delta = forward * movevals.y * 0.05 + right * movevals.x * 0.05;
             root_transform.translation += delta;
         }
+    }
+}
+
+fn snap_turn_system(
+    turn_actions: Res<MoveActions>,
+    //time: Res<Time>,
+    mut root_query: Query<&mut Transform, With<XrTrackingRoot>>,
+    vec2_value: Query<&Vec2ActionValue>,
+    mut turn_state: ResMut<TurnState>,
+) {
+    let movevals = vec2_value.get(turn_actions.turn_action).unwrap().any;
+    
+    let turn_value = movevals.x;
+
+    // Snap-Turn nur auslösen, wenn Stick deutlich nach links oder rechts zeigt
+    if turn_value.abs() > 0.8 && turn_state.ready {
+        if let Ok(mut transform) = root_query.get_single_mut() {
+            let angle = if turn_value > 0.0 { -FRAC_PI_4 } else { FRAC_PI_4 }; // Rechts = negative Rotation
+            transform.rotate(Quat::from_rotation_y(angle));
+            turn_state.ready = false;
+        }
+    }
+
+    // Stick muss erst losgelassen werden, bevor nächste Drehung möglich ist
+    if turn_value.abs() < 0.2 {
+        turn_state.ready = true;
     }
 }
