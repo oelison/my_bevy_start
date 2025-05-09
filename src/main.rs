@@ -11,6 +11,7 @@ use bevy::{
 };
 use bevy_mod_openxr::{add_xr_plugins, exts::OxrExtensions, init::OxrInitPlugin};
 
+use bevy_mod_xr::session::XrTrackingRoot;
 use openxr::EnvironmentBlendMode;
 use bevy::prelude::MorphWeights;
 use schminput::prelude::*;
@@ -247,24 +248,43 @@ fn play_animation_when_ready(
 fn run(
     move_actions: Res<MoveActions>,
     vec2_value: Query<&Vec2ActionValue>,
-    f32_value: Query<&F32ActionValue>,
-    bool_value: Query<&BoolActionValue>,
+    //f32_value: Query<&F32ActionValue>,
+    //bool_value: Query<&BoolActionValue>,
     left_hand: Query<&GlobalTransform, With<HandLeft>>,
     right_hand: Query<&GlobalTransform, With<HandRight>>,
     mut gizmos: Gizmos,
+    mut root_query: Query<&mut Transform, With<XrTrackingRoot>>,
 ) {
     info!(
         "move: {}",
         vec2_value.get(move_actions.move_action).unwrap().any
     );
-    info!("look: {}", f32_value.get(move_actions.look).unwrap().any);
-    info!("jump: {}", bool_value.get(move_actions.jump).unwrap().any);
+    //info!("look: {}", f32_value.get(move_actions.look).unwrap().any);
+    //info!("jump: {}", bool_value.get(move_actions.jump).unwrap().any);
     for hand in left_hand.into_iter() {
         let pose = hand.to_isometry();
-        gizmos.sphere(pose, 0.1, css::ORANGE_RED);
+        gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::BLUE);
+        gizmos.sphere(pose, 0.1, css::BLUE);
     }
     for hand in right_hand.into_iter() {
         let pose = hand.to_isometry();
-        gizmos.sphere(pose, 0.1, css::LIMEGREEN);
+        gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::RED);
+        gizmos.sphere(pose, 0.1, css::RED);
+    }
+    let movevals = vec2_value.get(move_actions.move_action).unwrap().any;
+    if movevals.length_squared() < 0.05 {
+        return;
+    }
+    if let Ok(mut root_transform) = root_query.get_single_mut() {
+        if let Some(hand) = right_hand.iter().next() {
+            let pose = hand.to_isometry();
+            
+            let forward = pose.rotation.mul_vec3(-Vec3::Z).normalize();
+            let right = pose.rotation.mul_vec3(Vec3::X).normalize();
+            info!("forward: {:?}", forward);
+            info!("right: {:?}", right);
+            let delta = forward * movevals.y * 0.05 + right * movevals.x * 0.05;
+            root_transform.translation += delta;
+        }
     }
 }
