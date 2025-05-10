@@ -14,6 +14,7 @@ cargo add bevy -F jpeg
 cargo add bevy_mod_xr
 cargo add bevy_mod_openxr
 cargo add openxr
+cargo add schminput -F xr
 ```
 
 Then I create a assets folder in the same directory where the toml file is. Here assets are loaded from. Absolute paths are not supported afaik.

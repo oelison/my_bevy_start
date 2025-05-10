@@ -11,7 +11,12 @@ use bevy::{
     scene::SceneInstanceReady,
     color::palettes::css,
 };
-use bevy_mod_openxr::{add_xr_plugins, exts::OxrExtensions, init::OxrInitPlugin};
+use bevy_mod_openxr::{
+    add_xr_plugins,
+    exts::OxrExtensions,
+    init::OxrInitPlugin,
+    resources::OxrSessionConfig,
+};
 
 use bevy_mod_xr::session::XrTrackingRoot;
 use openxr::EnvironmentBlendMode;
@@ -60,22 +65,22 @@ struct AnimationToPlay {
 fn main() {
     App::new()
         .add_plugins(
-            add_xr_plugins(DefaultPlugins.build().disable::<PipelinedRenderingPlugin>()).set(
+            add_xr_plugins(DefaultPlugins).build().set(
                 OxrInitPlugin {
-                    exts: {
-                        let mut exts = OxrExtensions::default();
-                        exts.ext_hp_mixed_reality_controller = true;
-                        exts
-                    },
-                    blend_modes: Some(vec![
-                        EnvironmentBlendMode::ALPHA_BLEND,
-                        EnvironmentBlendMode::ADDITIVE,
-                        EnvironmentBlendMode::OPAQUE,
-                    ]),
-                    ..Default::default()
-                },
-            ),
-        )
+            exts: {
+                let mut exts = OxrExtensions::default();
+                exts.ext_hp_mixed_reality_controller = true;
+                exts
+            },
+            ..OxrInitPlugin::default()
+        }))
+        .insert_resource(OxrSessionConfig {
+            blend_modes: Some({vec![
+                    EnvironmentBlendMode::ALPHA_BLEND,
+                    EnvironmentBlendMode::OPAQUE,
+                ]}),
+            ..OxrSessionConfig::default()
+        })
         .add_plugins(schminput::DefaultSchminputPlugins)
         .add_systems(Startup, setup_mesh_and_animation)
         .add_systems(Startup, setup)
@@ -240,12 +245,12 @@ fn play_animation_when_ready(
 ) {
     // The entity we spawned in `setup_mesh_and_animation` is the trigger's target.
     // Start by finding the AnimationToPlay component we added to that entity.
-    if let Ok(animation_to_play) = animations_to_play.get(trigger.entity()) {
+    if let Ok(animation_to_play) = animations_to_play.get(trigger.target()) {
         // The SceneRoot component will have spawned the scene as a hierarchy
         // of entities parented to our entity. Since the asset contained a skinned
         // mesh and animations, it will also have spawned an animation player
         // component. Search our entity's descendants to find the animation player.
-        for child in children.iter_descendants(trigger.entity()) {
+        for child in children.iter_descendants(trigger.target()) {
             if let Ok(mut player) = players.get_mut(child) {
                 // Tell the animation player to start the animation and keep
                 // repeating it.
@@ -294,7 +299,7 @@ fn run(
     if movevals.length_squared() < 0.05 {
         return;
     }
-    if let Ok(mut root_transform) = root_query.get_single_mut() {
+    if let Ok(mut root_transform) = root_query.single_mut() {
         if let Some(hand) = right_hand.iter().next() {
             let pose = hand.to_isometry();
             
@@ -321,7 +326,7 @@ fn snap_turn_system(
 
     // Snap-Turn nur auslösen, wenn Stick deutlich nach links oder rechts zeigt
     if turn_value.abs() > 0.8 && turn_state.ready {
-        if let Ok(mut transform) = root_query.get_single_mut() {
+        if let Ok(mut transform) = root_query.single_mut() {
             let angle = if turn_value > 0.0 { -FRAC_PI_4 } else { FRAC_PI_4 }; // Rechts = negative Rotation
             transform.rotate(Quat::from_rotation_y(angle));
             turn_state.ready = false;
