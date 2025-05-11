@@ -7,7 +7,6 @@ use std::f32::consts::FRAC_PI_4;
 
 use bevy::{
     prelude::*, 
-    render::pipelined_rendering::PipelinedRenderingPlugin, 
     scene::SceneInstanceReady,
     color::palettes::css,
 };
@@ -272,19 +271,11 @@ fn play_animation_when_ready(
 fn run(
     move_actions: Res<MoveActions>,
     vec2_value: Query<&Vec2ActionValue>,
-    //f32_value: Query<&F32ActionValue>,
-    //bool_value: Query<&BoolActionValue>,
     left_hand: Query<&GlobalTransform, With<HandLeft>>,
     right_hand: Query<&GlobalTransform, With<HandRight>>,
     mut gizmos: Gizmos,
     mut root_query: Query<&mut Transform, With<XrTrackingRoot>>,
 ) {
-    info!(
-        "move: {}",
-        vec2_value.get(move_actions.move_action).unwrap().any
-    );
-    //info!("look: {}", f32_value.get(move_actions.look).unwrap().any);
-    //info!("jump: {}", bool_value.get(move_actions.jump).unwrap().any);
     for hand in left_hand.into_iter() {
         let pose = hand.to_isometry();
         gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::BLUE);
@@ -315,7 +306,6 @@ fn run(
 
 fn snap_turn_system(
     turn_actions: Res<MoveActions>,
-    //time: Res<Time>,
     mut root_query: Query<&mut Transform, With<XrTrackingRoot>>,
     vec2_value: Query<&Vec2ActionValue>,
     mut turn_state: ResMut<TurnState>,
@@ -324,7 +314,7 @@ fn snap_turn_system(
     
     let turn_value = movevals.x;
 
-    // Snap-Turn nur auslösen, wenn Stick deutlich nach links oder rechts zeigt
+    // activate Snap-Turn only if the thumbstick is clearly moved
     if turn_value.abs() > 0.8 && turn_state.ready {
         if let Ok(mut transform) = root_query.single_mut() {
             let angle = if turn_value > 0.0 { -FRAC_PI_4 } else { FRAC_PI_4 }; // Rechts = negative Rotation
@@ -333,7 +323,7 @@ fn snap_turn_system(
         }
     }
 
-    // Stick muss erst losgelassen werden, bevor nächste Drehung möglich ist
+    // only one turn per thumbstick movement
     if turn_value.abs() < 0.2 {
         turn_state.ready = true;
     }
