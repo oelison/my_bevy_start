@@ -60,19 +60,32 @@ struct AnimationToPlay {
     index: AnimationNodeIndex,
 }
 
-// A common main function to start the Bevy app
+#[bevy_main]
 fn main() {
     App::new()
         .add_plugins(
-            add_xr_plugins(DefaultPlugins).build().set(
+            add_xr_plugins(DefaultPlugins).build()
+            .set(
                 OxrInitPlugin {
-            exts: {
-                let mut exts = OxrExtensions::default();
-                exts.ext_hp_mixed_reality_controller = true;
-                exts
-            },
-            ..OxrInitPlugin::default()
-        }))
+                    exts: {
+                        let mut exts = OxrExtensions::default();
+                        exts.ext_hp_mixed_reality_controller = true;
+                        exts
+                    },
+                    ..OxrInitPlugin::default()
+                }
+            )
+            .set(
+                WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Bevy OpenXR Morph Target Example".to_string(),
+                        canvas: Some("#bevy-canvas".to_string()),
+                        ..default()
+                    }),
+                    ..default()
+                }
+            ),
+        )
         .insert_resource(OxrSessionConfig {
             blend_modes: Some({vec![
                     EnvironmentBlendMode::ALPHA_BLEND,
@@ -290,17 +303,17 @@ fn run(
     if movevals.length_squared() < 0.05 {
         return;
     }
-    if let Ok(mut root_transform) = root_query.single_mut() {
-        if let Some(hand) = right_hand.iter().next() {
-            let pose = hand.to_isometry();
-            
-            let forward = pose.rotation.mul_vec3(-Vec3::Z).normalize();
-            let right = pose.rotation.mul_vec3(Vec3::X).normalize();
-            info!("forward: {:?}", forward);
-            info!("right: {:?}", right);
-            let delta = forward * movevals.y * 0.05 + right * movevals.x * 0.05;
-            root_transform.translation += delta;
-        }
+    if let Ok(mut root_transform) = root_query.single_mut() 
+        && let Some(hand) = right_hand.iter().next() {
+        let pose = hand.to_isometry();
+        
+        let forward = pose.rotation.mul_vec3(-Vec3::Z).normalize();
+        let right = pose.rotation.mul_vec3(Vec3::X).normalize();
+        info!("forward: {:?}", forward);
+        info!("right: {:?}", right);
+        let delta = forward * movevals.y * 0.05 + right * movevals.x * 0.05;
+        root_transform.translation += delta;
+        
     }
 }
 
@@ -315,12 +328,12 @@ fn snap_turn_system(
     let turn_value = movevals.x;
 
     // activate Snap-Turn only if the thumbstick is clearly moved
-    if turn_value.abs() > 0.8 && turn_state.ready {
-        if let Ok(mut transform) = root_query.single_mut() {
-            let angle = if turn_value > 0.0 { -FRAC_PI_4 } else { FRAC_PI_4 }; // Rechts = negative Rotation
-            transform.rotate(Quat::from_rotation_y(angle));
-            turn_state.ready = false;
-        }
+    if turn_value.abs() > 0.8 && turn_state.ready
+        && let Ok(mut transform) = root_query.single_mut() {
+        let angle = if turn_value > 0.0 { -FRAC_PI_4 } else { FRAC_PI_4 }; // Rechts = negative Rotation
+        transform.rotate(Quat::from_rotation_y(angle));
+        turn_state.ready = false;
+        
     }
 
     // only one turn per thumbstick movement

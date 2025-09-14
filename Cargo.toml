@@ -4,11 +4,76 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/oelison/my_bevy_start"
+publish = false
 
 [dependencies]
-bevy = { version = "0.16.0", features = ["jpeg"] }
+bevy = { version = "0.16.0", default-features = false, features = [ "jpeg", "bevy_gltf", "bevy_scene", "animation", "android-native-activity", "multi_threaded" ] }
 bevy_mod_openxr = "0.3.0"
 bevy_mod_xr = "0.3.0"
 openxr = "0.19.0"
 schminput = { version = "0.3.0", features = ["xr"] }
 
+[build-dependencies]
+reqwest = { version = "0.12", features = ["blocking"] }
+zip = "2.1"
+
+[lib]
+name="my_bevy_start"
+crate-type = ["rlib", "cdylib"]
+
+# This metadata is used by `cargo-apk` - `xbuild` uses the `manifest.yaml` instead.
+[package.metadata.android]
+package = "org.bevyengine.example_openxr_android"
+build_targets = ["aarch64-linux-android"]
+runtime_libs = "runtime_libs"
+apk_name = "my_bevy_start"
+# assets = "assets"
+# res = "assets/android-res"
+icon = "@mipmap/ic_launcher"
+label = "My Bevy start"
+strip = "strip"
+
+[package.metadata.android.sdk]
+target_sdk_version = 33
+
+[package.metadata.android.application.activity]
+theme = "@android:style/Theme.Black.NoTitleBar.Fullscreen"
+config_changes = "density|keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|uiMode"
+launch_mode = "singleTask"
+orientation = "landscape"
+resizeable_activity = false
+
+[[package.metadata.android.uses_feature]]
+name = "android.hardware.vr.headtracking"
+required = true
+
+[[package.metadata.android.uses_feature]]
+name = "oculus.software.handtracking"
+required = true
+
+[[package.metadata.android.uses_feature]]
+name = "com.oculus.feature.PASSTHROUGH"
+required = true
+
+[[package.metadata.android.uses_feature]]
+name = "com.oculus.experimental.enabled"
+required = true
+
+[[package.metadata.android.uses_permission]]
+name = "com.oculus.permission.HAND_TRACKING"
+
+[[package.metadata.android.application.activity.intent_filter]]
+actions = ["android.intent.action.MAIN"]
+categories = [
+    "com.oculus.intent.category.VR",
+    "android.intent.category.LAUNCHER",
+    "org.khronos.openxr.intent.category.IMMERSIVE_HMD",
+]
+
+#[[bin]]
+#path="src/lib.rs"
+#name="my_bevy_start"
+
+[package.metadata.android.signing.release]
+path = "../../../keystore.jks"
+keystore_password = "test1234"
