@@ -219,6 +219,11 @@ fn setup(
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
     commands.spawn((
+        Mesh3d(meshes.add(Cylinder::new(0.5, 10.0))),
+        MeshMaterial3d(materials.add(Color::srgb_u8(0, 255, 0))),
+        Transform::from_xyz(0.0, 0.05, 0.0),
+    ));
+    commands.spawn((
         PointLight {
             shadows_enabled: false,
             ..default()
