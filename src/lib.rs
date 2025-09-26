@@ -127,7 +127,6 @@ fn main() {
         .add_systems(Update, move_keyboard)
         .add_systems(Update, mouse_look_system)
         .insert_resource(ClearColor(Color::NONE))
-        .add_systems(PostUpdate, debug_hand_tracking)
         .insert_resource(TurnState::default())
         .insert_resource(MouseState::default())
         .run();
@@ -481,23 +480,6 @@ fn play_animation_when_ready(
                     .insert(AnimationGraphHandle(animation_to_play.graph_handle.clone()));
             }
         }
-    }
-}
-
-fn debug_hand_tracking(
-    left_hand: Query<&GlobalTransform, With<HandLeft>>,
-    right_hand: Query<&GlobalTransform, With<HandRight>>,
-    mut gizmos: Gizmos,
-) {
-    for hand in left_hand.into_iter() {
-        let pose = hand.to_isometry();
-        gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::BLUE);
-        gizmos.sphere(pose, 0.1, css::LIGHT_BLUE);
-    }
-    for hand in right_hand.into_iter() {
-        let pose = hand.to_isometry();
-        gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::RED);
-        gizmos.sphere(pose, 0.1, css::PINK);
     }
 }
 
