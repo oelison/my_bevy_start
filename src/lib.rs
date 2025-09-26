@@ -127,7 +127,7 @@ fn main() {
         .add_systems(Update, move_keyboard)
         .add_systems(Update, mouse_look_system)
         .insert_resource(ClearColor(Color::NONE))
-        .add_systems(Update, debug_hand_tracking)
+        .add_systems(PostUpdate, debug_hand_tracking)
         .insert_resource(TurnState::default())
         .insert_resource(MouseState::default())
         .run();
@@ -492,12 +492,12 @@ fn debug_hand_tracking(
     for hand in left_hand.into_iter() {
         let pose = hand.to_isometry();
         gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::BLUE);
-        gizmos.sphere(pose, 0.1, css::BLUE);
+        gizmos.sphere(pose, 0.1, css::LIGHT_BLUE);
     }
     for hand in right_hand.into_iter() {
         let pose = hand.to_isometry();
         gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::RED);
-        gizmos.sphere(pose, 0.1, css::RED);
+        gizmos.sphere(pose, 0.1, css::PINK);
     }
 }
 
@@ -509,21 +509,10 @@ fn run(
     mut gizmos: Gizmos,
     mut root_query: Query<&mut Transform, With<XrTrackingRoot>>,
 ) {
-    for hand in left_hand.into_iter() {
-        let pose = hand.to_isometry();
-        gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::BLUE);
-        gizmos.sphere(pose, 0.1, css::BLUE);
-    }
-    for hand in right_hand.into_iter() {
-        let pose = hand.to_isometry();
-        gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::RED);
-        gizmos.sphere(pose, 0.1, css::RED);
-    }
     let movevals = vec2_value.get(move_actions.move_action).unwrap().any;
-    if movevals.length_squared() < 0.05 {
-        return;
-    }
-    if let Ok(mut root_transform) = root_query.single_mut() 
+    let mut delta = Vec3::ZERO;
+    if movevals.length_squared() > 0.05
+        && let Ok(mut root_transform) = root_query.single_mut() 
         && let Some(hand) = right_hand.iter().next() {
         let pose = hand.to_isometry();
         
@@ -531,9 +520,21 @@ fn run(
         let right = pose.rotation.mul_vec3(Vec3::X).normalize();
         info!("forward: {:?}", forward);
         info!("right: {:?}", right);
-        let delta = forward * movevals.y * 0.05 + right * movevals.x * 0.05;
+        delta = forward * movevals.y * 0.05 + right * movevals.x * 0.05;
         root_transform.translation += delta;
         
+    }
+    for hand in left_hand.into_iter() {
+        let mut pose = hand.to_isometry();
+        pose.translation += Vec3A::from(delta);
+        gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::BLUE);
+        gizmos.sphere(pose, 0.1, css::BLUE);
+    }
+    for hand in right_hand.into_iter() {
+        let mut pose = hand.to_isometry();
+        pose.translation += Vec3A::from(delta);
+        gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::RED);
+        gizmos.sphere(pose, 0.1, css::RED);
     }
 }
 

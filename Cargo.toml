@@ -24,6 +24,10 @@ zip = "2.1"
 name="my_bevy_start"
 crate-type = ["rlib", "cdylib"]
 
+#[[bin]]
+#path="src/lib.rs"
+#name="my_bevy_start"
+
 # This metadata is used by `cargo-apk` - `xbuild` uses the `manifest.yaml` instead.
 [package.metadata.android]
 package = "org.bevyengine.example_openxr_android"
