@@ -3,7 +3,12 @@
 // The model is loaded from a file and displayed in a VR environment.
 // The example includes a simple setup for a Bevy app with OpenXR integration.
 
+mod asset_handler;
+use asset_handler::{AssetElement, AssetElementList, ASSET_ELEMENTS, SIMPLE_HUMAN_RIG_INDEX, SIMPLE_WALL_INDEX};
+
 use std::f32::consts::FRAC_PI_4;
+
+use bevy_mod_openxr::session::OxrSession;
 
 use bevy::{
     prelude::*, 
@@ -17,10 +22,12 @@ use bevy_mod_openxr::{
     resources::OxrSessionConfig,
 };
 
-use bevy_mod_xr::session::XrTrackingRoot;
+use bevy_mod_xr::session::{XrSessionCreated, XrTrackingRoot};
+use bevy_xr_utils::transform_utils::{self};
 use openxr::EnvironmentBlendMode;
 use bevy::prelude::MorphWeights;
 use schminput::prelude::*;
+use bevy::input::mouse::MouseMotion;
 
 #[derive(Component, Clone, Copy)]
 struct HandLeft;
@@ -43,6 +50,13 @@ struct MoveActions {
     turn_action: Entity,
     look: Entity,
     jump: Entity,
+    center_camera: Entity,
+    move_left: Entity,
+    move_right: Entity,
+    move_forward: Entity,
+    move_backward: Entity,
+    move_up: Entity,
+    move_down: Entity,
 }
 
 // Zustand für Turn-steuerung
@@ -51,7 +65,14 @@ struct TurnState {
     ready: bool,
 }
 
-const GLTF_PATH: &str = "simpleHumanRig.glb";
+#[derive(Component)]
+struct KeyboardCamera;
+
+#[derive(Resource, Default)]
+struct MouseState {
+    pitch: f32,
+    yaw: f32,
+}
 
 // the component that will be used to play the animation
 #[derive(Component)]
@@ -94,47 +115,90 @@ fn main() {
             ..OxrSessionConfig::default()
         })
         .add_plugins(schminput::DefaultSchminputPlugins)
-        .add_systems(Startup, setup_mesh_and_animation)
+        .add_plugins(transform_utils::TransformUtilitiesPlugin)
+        .add_systems(PreStartup, setup_assets)
+        .add_systems(Startup, setup_mesh_only)
         .add_systems(Startup, setup)
         .add_systems(Startup, setup2)
-        .add_systems(Update, update_morph_targets)
+        .add_systems(XrSessionCreated, create_view_space)
+        //.add_systems(Update, update_morph_targets)
         .add_systems(Update, run)
         .add_systems(Update, snap_turn_system)
+        .add_systems(Update, move_keyboard)
+        .add_systems(Update, mouse_look_system)
         .insert_resource(ClearColor(Color::NONE))
-        .insert_resource(TurnState::default()) 
+        .add_systems(Update, debug_hand_tracking)
+        .insert_resource(TurnState::default())
+        .insert_resource(MouseState::default())
         .run();
+}
+
+#[derive(Component)]
+struct HeadsetView;
+
+fn create_view_space(
+    session: Res<OxrSession>, 
+    mut commands: Commands
+) {
+    let space = session.create_reference_space(openxr::ReferenceSpaceType::VIEW, Transform::IDENTITY).unwrap();
+    // get the XrSpace out of the XrReferenceSpace
+    commands.spawn((HeadsetView,space.0));
+}
+
+fn setup_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let elements = vec![
+        AssetElement {
+            name: "simpleHumanRig",
+            asset: asset_server.load(GltfAssetLabel::Scene(0).from_asset(ASSET_ELEMENTS[SIMPLE_HUMAN_RIG_INDEX].file_name)),
+        },
+        AssetElement {
+            name: "simpleWall",
+            asset: asset_server.load(GltfAssetLabel::Scene(0).from_asset(ASSET_ELEMENTS[SIMPLE_WALL_INDEX].file_name)),
+        },
+    ];
+
+    commands.insert_resource(AssetElementList { elements });
+    info!("Maze elements loaded!");
+}
+
+fn setup_mesh_only(
+    mut commands: Commands,
+    asset_elements: Res<AssetElementList>,
+) {
+    // if let Some(handle) = asset_elements.get("simpleHumanRig") {
+    //     commands.spawn((
+    //         Transform::from_xyz(0.0, 0.0, 0.0),
+    //         SceneRoot(
+    //             handle.asset.clone(),
+    //         ),
+    //     ));
+    // }
+    // if let Some(handle) = asset_elements.get("simpleWall") {
+    //     commands.spawn((
+    //         Transform::from_xyz(5.0, 0.0, 0.0).with_rotation(
+    //             Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
+    //         ),
+    //         SceneRoot(
+    //             handle.asset.clone(),
+    //         ),
+    //     ));
+    // }
 }
 
 fn setup_mesh_and_animation(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
+    asset_elements: Res<AssetElementList>,
 ) {
-    // Create an animation graph containing a single animation. We want the "run"
-    // animation from our example asset, which has an index of two.
-    let (graph, index) = AnimationGraph::from_clip(
-        asset_server.load(GltfAssetLabel::Animation(0).from_asset(GLTF_PATH)),
-    );
-
-    // Store the animation graph as an asset.
-    let graph_handle = graphs.add(graph);
-
-    // Create a component that stores a reference to our animation.
-    let animation_to_play = AnimationToPlay {
-        graph_handle,
-        index,
-    };
-
-    // Start loading the asset as a scene and store a reference to it in a
-    // SceneRoot component. This component will automatically spawn a scene
-    // containing our mesh once it has loaded.
-    let mesh_scene = SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(GLTF_PATH)));
-
-    // Spawn an entity with our components, and connect it to an observer that
-    // will trigger when the scene is loaded and spawned.
-    commands
-        .spawn((animation_to_play, mesh_scene))
-        .observe(play_animation_when_ready);
+    if let Some(handle) = asset_elements.get_by_index(SIMPLE_HUMAN_RIG_INDEX) {
+        let entity = commands.spawn((
+            Transform::from_xyz(0.0, 0.0, -5.0).with_rotation(
+                Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
+            ),
+            SceneRoot(
+                handle.clone(),
+            ),
+        )).id();
+    }
 }
 
 fn setup2(mut cmds: Commands) {
@@ -143,44 +207,97 @@ fn setup2(mut cmds: Commands) {
     let move_action = cmds
         .spawn((
             Action::new("move", "Move", player_set),
-            OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/thumbstick"]),
+            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/thumbstick"]),
+            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/thumbstick"]),
             Vec2ActionValue::new(),
         ))
         .id();
     let turn_action = cmds
         .spawn((
             Action::new("turn", "Turn", player_set),
-            OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/thumbstick"]),
+            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/thumbstick"]),
+            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/thumbstick"]),
             Vec2ActionValue::new(),
         ))
         .id();
     let look = cmds
         .spawn((
             Action::new("look", "Look", player_set),
-            OxrBindings::new().bindngs(
-                "/interaction_profiles/hp/mixed_reality_controller",
-                ["/user/hand/right/input/thumbstick/x"],
-            ),
+            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller",["/user/hand/right/input/thumbstick/x"]),
+            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE,["/user/hand/right/input/thumbstick/x"]),
             F32ActionValue::new(),
         ))
         .id();
     let jump = cmds
         .spawn((
             Action::new("jump", "Jump", player_set),
-            OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/a/click"]),
+            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/a/click"]),
+            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/a/click"]),
             KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::Space)),
             GamepadBindings::new()
                 .bind(GamepadBinding::new(GamepadBindingSource::South).button_just_pressed()),
             BoolActionValue::new(),
         ))
         .id();
+    let move_left = cmds
+        .spawn((
+            Action::new("move_left", "Move Left", player_set),
+            KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::KeyA)),
+            BoolActionValue::new(),
+        ))
+        .id();
+    let move_right = cmds
+        .spawn((
+            Action::new("move_right", "Move Right", player_set),
+            KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::KeyD)),
+            BoolActionValue::new(),
+        ))
+        .id();
+    let move_forward = cmds
+        .spawn((
+            Action::new("move_forward", "Move Forward", player_set),
+            KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::KeyW)),
+            BoolActionValue::new(),
+        ))
+        .id();
+    let move_backward = cmds
+        .spawn((
+            Action::new("move_backward", "Move Backward", player_set),
+            KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::KeyS)),
+            BoolActionValue::new(),
+        ))
+        .id();
+    let move_up = cmds
+        .spawn((
+            Action::new("move_up", "Move Up", player_set),
+            KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::KeyE)),
+            BoolActionValue::new(),
+        ))
+        .id();
+    let move_down = cmds
+        .spawn((
+            Action::new("move_down", "Move Down", player_set),
+            KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::KeyQ)),
+            BoolActionValue::new(),
+        ))
+        .id();
+    let center_camera = cmds
+        .spawn((
+            Action::new("center_camera", "Center Camera", player_set),
+            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/y/click"]),
+            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/y/click"]),
+            GamepadBindings::new()
+                .bind(GamepadBinding::new(GamepadBindingSource::East).button_just_pressed()),
+            BoolActionValue::new(),
+        ))
+        .id();
     let left_hand = cmds.spawn(HandLeft).id();
-
     let right_hand = cmds.spawn(HandRight).id();
     let left_pose = cmds
         .spawn((
             Action::new("hand_left_pose", "Left Hand Pose", pose_set),
-            OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/grip/pose"]),
+            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/grip/pose"]),
+            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/grip/pose"]),
             AttachSpaceToEntity(left_hand),
             SpaceActionValue::new(),
         ))
@@ -188,7 +305,8 @@ fn setup2(mut cmds: Commands) {
     let right_pose = cmds
         .spawn((
             Action::new("hand_right_pose", "Right Hand Pose", pose_set),
-            OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/aim/pose"]),
+            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/aim/pose"]),
+            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/aim/pose"]),
             AttachSpaceToEntity(right_hand),
             SpaceActionValue::new(),
         ))
@@ -199,6 +317,13 @@ fn setup2(mut cmds: Commands) {
         turn_action,
         look,
         jump,
+        center_camera,
+        move_left,
+        move_right,
+        move_forward,
+        move_backward,
+        move_up,
+        move_down,
     });
     cmds.insert_resource(CoreActions {
         set: pose_set,
@@ -234,6 +359,79 @@ fn setup(
         Camera3d::default(),
         Transform::from_xyz(-2.5, 2.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
+}
+
+fn move_keyboard(
+    move_actions: Res<MoveActions>,
+    bool_value: Query<&BoolActionValue>,
+    mut camera_query: Query<&mut Transform, With<KeyboardCamera>>,
+    time: Res<Time>,
+) {
+    let mut moved = false;
+    let mut direction = Vec3::ZERO;
+    let mut direction_up_down = Vec3::ZERO;
+    let speed = 1.0;
+
+    if bool_value.get(move_actions.move_left).unwrap().any {
+        direction.x -= 1.0;
+        moved = true;
+    }
+    if bool_value.get(move_actions.move_right).unwrap().any {
+        direction.x += 1.0;
+        moved = true;
+    }
+    if bool_value.get(move_actions.move_forward).unwrap().any {
+        direction.z -= 1.0;
+        moved = true;
+    }
+    if bool_value.get(move_actions.move_backward).unwrap().any {
+        direction.z += 1.0;
+        moved = true;
+    }
+    if bool_value.get(move_actions.move_up).unwrap().any {
+        direction_up_down.y += 1.0;
+        moved = true;
+    }
+    if bool_value.get(move_actions.move_down).unwrap().any {
+        direction_up_down.y -= 1.0;
+        moved = true;
+    }
+
+    if moved {
+        let delta = time.delta_secs();
+        for mut transform in camera_query.iter_mut() {
+            // Bewegung in Blickrichtung (lokaler Raum)
+            let mut local_direction = transform.rotation * direction.normalize_or_zero();
+            local_direction.y = 0.0; // Keine vertikale Bewegung durch Blickrichtung
+            transform.translation += (local_direction * speed + direction_up_down * speed) * delta;
+        }
+    }
+}
+
+fn mouse_look_system(
+    mut mouse_state: ResMut<MouseState>,
+    mut camera_query: Query<&mut Transform, With<KeyboardCamera>>,
+    mut mouse_motion_events: EventReader<MouseMotion>,
+) {
+    
+    let mut delta = Vec2::ZERO;
+    for event in mouse_motion_events.read() {
+        delta += event.delta * 4.0; // scaling for higher sensitivity
+    }
+    if delta == Vec2::ZERO {
+        return;
+    }
+
+    // Empfindlichkeit anpassen
+    let sensitivity = 0.005;
+    mouse_state.yaw -= delta.x * sensitivity;
+    mouse_state.pitch -= delta.y * sensitivity;
+    mouse_state.pitch = mouse_state.pitch.clamp(-1.54, 1.54); // ca. +/- 88 Grad
+
+    for mut transform in camera_query.iter_mut() {
+        transform.rotation = Quat::from_axis_angle(Vec3::Y, mouse_state.yaw)
+            * Quat::from_axis_angle(Vec3::X, mouse_state.pitch);
+    }
 }
 
 // is called when the app is running
@@ -283,6 +481,23 @@ fn play_animation_when_ready(
                     .insert(AnimationGraphHandle(animation_to_play.graph_handle.clone()));
             }
         }
+    }
+}
+
+fn debug_hand_tracking(
+    left_hand: Query<&GlobalTransform, With<HandLeft>>,
+    right_hand: Query<&GlobalTransform, With<HandRight>>,
+    mut gizmos: Gizmos,
+) {
+    for hand in left_hand.into_iter() {
+        let pose = hand.to_isometry();
+        gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::BLUE);
+        gizmos.sphere(pose, 0.1, css::BLUE);
+    }
+    for hand in right_hand.into_iter() {
+        let pose = hand.to_isometry();
+        gizmos.arrow(Vec3 { x: 0.0, y: 0.0, z: 0.0 }, pose.rotation.mul_vec3(-Vec3::Z).normalize(), css::RED);
+        gizmos.sphere(pose, 0.1, css::RED);
     }
 }
 
