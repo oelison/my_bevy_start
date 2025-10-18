@@ -11,9 +11,7 @@ use std::f32::consts::FRAC_PI_4;
 use bevy_mod_openxr::session::OxrSession;
 
 use bevy::{
-    prelude::*, 
-    scene::SceneInstanceReady,
-    color::palettes::css,
+    color::palettes::css, prelude::*, render::view::NoIndirectDrawing, scene::SceneInstanceReady
 };
 use bevy_mod_openxr::{
     add_xr_plugins,
@@ -117,19 +115,38 @@ fn main() {
         .add_plugins(schminput::DefaultSchminputPlugins)
         .add_plugins(transform_utils::TransformUtilitiesPlugin)
         .add_systems(PreStartup, setup_assets)
-        .add_systems(Startup, setup_mesh_only)
+        .add_systems(Startup, setup_mesh_and_animation)
         .add_systems(Startup, setup)
         .add_systems(Startup, setup2)
         .add_systems(XrSessionCreated, create_view_space)
-        //.add_systems(Update, update_morph_targets)
+        .add_systems(Update, disable_indirect)
+        .add_systems(Update, modify_msaa)
+        .add_systems(Update, update_morph_targets)
         .add_systems(Update, run)
         .add_systems(Update, snap_turn_system)
         .add_systems(Update, move_keyboard)
         .add_systems(Update, mouse_look_system)
-        .insert_resource(ClearColor(Color::NONE))
+        .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(TurnState::default())
         .insert_resource(MouseState::default())
         .run();
+}
+
+#[derive(Component)]
+struct MsaaModified;
+
+fn modify_msaa(cams: Query<Entity, (With<Camera>, Without<MsaaModified>)>, mut commands: Commands) {
+    for cam in &cams {
+        commands.entity(cam).insert(Msaa::Off).insert(MsaaModified);
+    }
+}
+
+fn disable_indirect(
+    mut commands: Commands,
+    cameras: Query<Entity, (With<Camera>, Without<NoIndirectDrawing>)>,) {
+    for entity in cameras {
+        commands.entity(entity).insert(bevy::render::view::NoIndirectDrawing);
+    }
 }
 
 #[derive(Component)]
@@ -160,43 +177,31 @@ fn setup_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
     info!("Maze elements loaded!");
 }
 
-fn setup_mesh_only(
-    mut commands: Commands,
-    asset_elements: Res<AssetElementList>,
-) {
-    // if let Some(handle) = asset_elements.get("simpleHumanRig") {
-    //     commands.spawn((
-    //         Transform::from_xyz(0.0, 0.0, 0.0),
-    //         SceneRoot(
-    //             handle.asset.clone(),
-    //         ),
-    //     ));
-    // }
-    // if let Some(handle) = asset_elements.get("simpleWall") {
-    //     commands.spawn((
-    //         Transform::from_xyz(5.0, 0.0, 0.0).with_rotation(
-    //             Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
-    //         ),
-    //         SceneRoot(
-    //             handle.asset.clone(),
-    //         ),
-    //     ));
-    // }
-}
-
 fn setup_mesh_and_animation(
     mut commands: Commands,
     asset_elements: Res<AssetElementList>,
+    asset_server: Res<AssetServer>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
     if let Some(handle) = asset_elements.get_by_index(SIMPLE_HUMAN_RIG_INDEX) {
-        let entity = commands.spawn((
+        let (graph, index) = AnimationGraph::from_clip(
+            asset_server.load(GltfAssetLabel::Animation(0).from_asset(ASSET_ELEMENTS[SIMPLE_HUMAN_RIG_INDEX].file_name)),
+        );
+
+        // Store the animation graph as an asset.
+        let graph_handle = graphs.add(graph);
+        let animation_to_play = AnimationToPlay {
+            graph_handle,
+            index,
+        };
+        let mesh_scene = SceneRoot(handle.clone());
+        let _entity = commands.spawn((
             Transform::from_xyz(0.0, 0.0, -5.0).with_rotation(
                 Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
             ),
-            SceneRoot(
-                handle.clone(),
-            ),
-        )).id();
+            animation_to_play,
+            mesh_scene,
+        )).observe(play_animation_when_ready).id();
     }
 }
 
@@ -341,11 +346,6 @@ fn setup(
         Mesh3d(meshes.add(Circle::new(4.0))),
         MeshMaterial3d(materials.add(Color::srgb_u8(255, 0, 0))),
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-    ));
-    commands.spawn((
-        Mesh3d(meshes.add(Cylinder::new(0.5, 10.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(0, 255, 0))),
-        Transform::from_xyz(0.0, 0.05, 0.0),
     ));
     commands.spawn((
         PointLight {
