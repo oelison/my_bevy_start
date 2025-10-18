@@ -525,18 +525,29 @@ fn snap_turn_system(
     mut root_query: Query<&mut Transform, With<XrTrackingRoot>>,
     vec2_value: Query<&Vec2ActionValue>,
     mut turn_state: ResMut<TurnState>,
+    headset_view_query: Query<&Transform, (With<HeadsetView>, Without<XrTrackingRoot>)>
 ) {
     let movevals = vec2_value.get(turn_actions.turn_action).unwrap().any;
     
     let turn_value = movevals.x;
 
     // activate Snap-Turn only if the thumbstick is clearly moved
-    if turn_value.abs() > 0.8 && turn_state.ready
-        && let Ok(mut transform) = root_query.single_mut() {
-        let angle = if turn_value > 0.0 { -FRAC_PI_4 } else { FRAC_PI_4 }; // Rechts = negative Rotation
-        transform.rotate(Quat::from_rotation_y(angle));
-        turn_state.ready = false;
-        
+    if turn_value.abs() > 0.8 && turn_state.ready {
+        if let Ok(mut root_transform) = root_query.single_mut() {
+            if let Ok(headset_transform) = headset_view_query.single() {
+                let root_translation = root_transform.translation;
+                let root_rotation = root_transform.rotation;
+                let local_headset = headset_transform.translation;
+                let world_headset = root_translation + root_rotation * local_headset;
+                let angle = if turn_value > 0.0 { -FRAC_PI_4 } else { FRAC_PI_4 }; // right = negative Rotation
+                root_transform.rotate_around(world_headset, Quat::from_rotation_y(angle));
+                turn_state.ready = false;
+            } else {
+                info!("No headset view found, cannot rotate.");
+            }
+        } else {
+            info!("No root transform found, cannot rotate.");
+        }
     }
 
     // only one turn per thumbstick movement
