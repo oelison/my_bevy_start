@@ -4,14 +4,14 @@
 // The example includes a simple setup for a Bevy app with OpenXR integration.
 
 mod asset_handler;
-use asset_handler::{AssetElement, AssetElementList, ASSET_ELEMENTS, SIMPLE_HUMAN_RIG_INDEX, SIMPLE_WALL_INDEX};
+use asset_handler::{AssetElement, AssetElementList, ASSET_ELEMENTS, MAX_ASSET_ELEMENTS};
 
-use std::f32::consts::FRAC_PI_4;
+use std::{f32::consts::FRAC_PI_4, ops::DerefMut};
 
 use bevy_mod_openxr::session::OxrSession;
 
 use bevy::{
-    color::palettes::css, prelude::*, render::view::NoIndirectDrawing, scene::SceneInstanceReady
+    color::palettes::css::{self, WHITE}, prelude::*, render::view::NoIndirectDrawing, scene::SceneInstanceReady
 };
 use bevy_mod_openxr::{
     add_xr_plugins,
@@ -21,6 +21,7 @@ use bevy_mod_openxr::{
 };
 
 use bevy_mod_xr::session::{XrSessionCreated, XrTrackingRoot};
+use bevy_mod_xr::camera::XrProjection;
 use bevy_xr_utils::transform_utils::{self};
 use openxr::EnvironmentBlendMode;
 use bevy::prelude::MorphWeights;
@@ -47,7 +48,7 @@ struct MoveActions {
     move_action: Entity,
     turn_action: Entity,
     look: Entity,
-    jump: Entity,
+    new_scene: Entity,
     center_camera: Entity,
     move_left: Entity,
     move_right: Entity,
@@ -55,6 +56,8 @@ struct MoveActions {
     move_backward: Entity,
     move_up: Entity,
     move_down: Entity,
+    shown_scene: usize,
+    new_scene_released: bool,
 }
 
 // Zustand für Turn-steuerung
@@ -121,11 +124,13 @@ fn main() {
         .add_systems(XrSessionCreated, create_view_space)
         .add_systems(Update, disable_indirect)
         .add_systems(Update, modify_msaa)
+        .add_systems(Update, adjust_near_plane)
         .add_systems(Update, update_morph_targets)
         .add_systems(Update, run)
         .add_systems(Update, snap_turn_system)
         .add_systems(Update, move_keyboard)
         .add_systems(Update, mouse_look_system)
+        .add_systems(Update, spawn_new_scene)
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(TurnState::default())
         .insert_resource(MouseState::default())
@@ -136,9 +141,27 @@ fn main() {
 struct MsaaModified;
 
 fn modify_msaa(cams: Query<Entity, (With<Camera>, Without<MsaaModified>)>, mut commands: Commands) {
-    for cam in &cams {
+   for cam in &cams {
         commands.entity(cam).insert(Msaa::Off).insert(MsaaModified);
     }
+}
+
+fn adjust_near_plane(query: Query<&mut Projection, With<Camera3d>>) {
+    // Safely get the single camera projection if present and adjust its near plane when it's perspective.
+    for mut projection in query {
+        match projection.deref_mut() {
+            Projection::Perspective(perspective_projection) => perspective_projection.near = 0.1,
+            Projection::Orthographic(orthographic_projection) => orthographic_projection.near = 0.1,
+            Projection::Custom(custom_projection) => {
+                if let Some(xr) = custom_projection.get_mut::<XrProjection>() {
+                    xr.near = 0.1;
+                } else {
+                    error_once!("unknown custom camera projection");
+                }
+            }
+        }
+    }
+    
 }
 
 fn disable_indirect(
@@ -162,17 +185,13 @@ fn create_view_space(
 }
 
 fn setup_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let elements = vec![
-        AssetElement {
-            name: "simpleHumanRig",
-            asset: asset_server.load(GltfAssetLabel::Scene(0).from_asset(ASSET_ELEMENTS[SIMPLE_HUMAN_RIG_INDEX].file_name)),
-        },
-        AssetElement {
-            name: "simpleWall",
-            asset: asset_server.load(GltfAssetLabel::Scene(0).from_asset(ASSET_ELEMENTS[SIMPLE_WALL_INDEX].file_name)),
-        },
-    ];
-
+    let mut elements = Vec::with_capacity(MAX_ASSET_ELEMENTS);
+    for asset in ASSET_ELEMENTS.iter().take(MAX_ASSET_ELEMENTS) {
+        info!("Loading asset: {}", asset.file_name);
+        elements.push(AssetElement {
+            asset: asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset.file_name)),
+        });
+    }
     commands.insert_resource(AssetElementList { elements });
     info!("Maze elements loaded!");
 }
@@ -183,9 +202,9 @@ fn setup_mesh_and_animation(
     asset_server: Res<AssetServer>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
-    if let Some(handle) = asset_elements.get_by_index(SIMPLE_HUMAN_RIG_INDEX) {
+    if let Some(handle) = asset_elements.get_by_index(0) {
         let (graph, index) = AnimationGraph::from_clip(
-            asset_server.load(GltfAssetLabel::Animation(0).from_asset(ASSET_ELEMENTS[SIMPLE_HUMAN_RIG_INDEX].file_name)),
+            asset_server.load(GltfAssetLabel::Animation(0).from_asset(ASSET_ELEMENTS[0].file_name)),
         );
 
         // Store the animation graph as an asset.
@@ -196,9 +215,6 @@ fn setup_mesh_and_animation(
         };
         let mesh_scene = SceneRoot(handle.clone());
         let _entity = commands.spawn((
-            Transform::from_xyz(0.0, 0.0, -5.0).with_rotation(
-                Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
-            ),
             animation_to_play,
             mesh_scene,
         )).observe(play_animation_when_ready).id();
@@ -232,12 +248,12 @@ fn setup2(mut cmds: Commands) {
             F32ActionValue::new(),
         ))
         .id();
-    let jump = cmds
+    let new_scene = cmds
         .spawn((
-            Action::new("jump", "Jump", player_set),
+            Action::new("new_scene", "New scene", player_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/a/click"]),
             OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/a/click"]),
-            KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::Space)),
+            KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::KeyI)),
             GamepadBindings::new()
                 .bind(GamepadBinding::new(GamepadBindingSource::South).button_just_pressed()),
             BoolActionValue::new(),
@@ -320,7 +336,7 @@ fn setup2(mut cmds: Commands) {
         move_action,
         turn_action,
         look,
-        jump,
+        new_scene,
         center_camera,
         move_left,
         move_right,
@@ -328,6 +344,8 @@ fn setup2(mut cmds: Commands) {
         move_backward,
         move_up,
         move_down,
+        shown_scene: 0,
+        new_scene_released: true,
     });
     cmds.insert_resource(CoreActions {
         set: pose_set,
@@ -338,22 +356,15 @@ fn setup2(mut cmds: Commands) {
 
 fn setup(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // circular base
-    commands.spawn((
-        Mesh3d(meshes.add(Circle::new(4.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(255, 0, 0))),
-        Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-    ));
-    commands.spawn((
-        PointLight {
-            shadows_enabled: false,
+    // ambient light only
+    commands.insert_resource(
+        AmbientLight {
+            color: WHITE.into(),
+            brightness: 400.0,
             ..default()
-        },
-        Transform::from_xyz(4.0, 8.0, 4.0),
-    ));
+        }
+    );
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(-2.5, 2.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
@@ -448,6 +459,45 @@ fn update_morph_targets(
     }
 }
 
+fn spawn_new_scene(
+    mut commands: Commands,
+    query: Query<Entity, With<SceneRoot>>,
+    assets: Res<AssetElementList>,
+    mut move_actions: ResMut<MoveActions>,
+    bool_value: Query<&BoolActionValue>,
+) {
+    if !bool_value.get(move_actions.new_scene).unwrap().any {
+        if !move_actions.new_scene_released {
+            info!("Button released");
+        }
+        move_actions.new_scene_released = true;
+        return;
+    }
+    if !move_actions.new_scene_released {
+        return;
+    }
+    info!("Spawning new scene index {}", move_actions.shown_scene);
+    move_actions.new_scene_released = false;
+    move_actions.shown_scene += 1;
+    if move_actions.shown_scene >= MAX_ASSET_ELEMENTS {
+        move_actions.shown_scene = 0;
+    }
+    for entity in query.iter() {
+        info!("{}", entity.index().to_string());
+        commands.entity(entity).despawn();
+    }
+    // Function to spawn a new scene if needed
+    if let Some(handle) = assets.get_by_index(move_actions.shown_scene) {
+        let _entity = commands.spawn((
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            SceneRoot(handle.clone(),
+        )
+        )).id();
+    } else {
+        info!("No asset found for index {}", move_actions.shown_scene);
+    }
+}
+
 // is called when the scene is loaded
 // this is where we play the animation (head nodding)
 fn play_animation_when_ready(
@@ -502,7 +552,7 @@ fn run(
         let right = pose.rotation.mul_vec3(Vec3::X).normalize();
         info!("forward: {:?}", forward);
         info!("right: {:?}", right);
-        delta = forward * movevals.y * 0.05 + right * movevals.x * 0.05;
+        delta = forward * movevals.y * 0.01 + right * movevals.x * 0.01;
         root_transform.translation += delta;
         
     }

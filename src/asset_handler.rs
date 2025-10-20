@@ -5,10 +5,7 @@ use bevy::scene::Scene;
 const SIMPLE_HUMAN_RIG: &str = "simpleHumanRig.glb";
 const SIMPLE_WALL: &str = "simpleWall.glb";
 
-
-pub const SIMPLE_HUMAN_RIG_INDEX: usize = 0;
-pub const SIMPLE_WALL_INDEX: usize = 1;
-pub const NOTHING: usize = usize::MAX;
+pub const MAX_ASSET_ELEMENTS: usize = 2;
 
 pub struct AssetElementFile {
     pub file_name: &'static str,
@@ -25,7 +22,6 @@ pub static ASSET_ELEMENTS: &[AssetElementFile] = &[
 
 #[derive(Clone)]
 pub struct AssetElement {
-    pub name: &'static str,
     pub asset: Handle<Scene>,
 }
 
@@ -35,9 +31,6 @@ pub struct AssetElementList {
 }
 
 impl AssetElementList {
-    pub fn get(&self, name: &str) -> Option<&AssetElement> {
-        self.elements.iter().find(|e| e.name == name)
-    }
     pub fn get_by_index(&self, index: usize) -> Option<&Handle<Scene>> {
         self.elements.get(index).map(|e| &e.asset)
     }
