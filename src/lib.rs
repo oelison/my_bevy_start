@@ -122,7 +122,6 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(Startup, setup2)
         .add_systems(XrSessionCreated, create_view_space)
-        .add_systems(Update, disable_indirect)
         .add_systems(Update, modify_msaa)
         .add_systems(Update, adjust_near_plane)
         .add_systems(Update, update_morph_targets)
@@ -138,11 +137,14 @@ fn main() {
 }
 
 #[derive(Component)]
-struct MsaaModified;
+struct CamModified;
 
-fn modify_msaa(cams: Query<Entity, (With<Camera>, Without<MsaaModified>)>, mut commands: Commands) {
+fn modify_msaa(cams: Query<Entity, (With<Camera>, Without<CamModified>)>, mut commands: Commands) {
    for cam in &cams {
-        commands.entity(cam).insert(Msaa::Off).insert(MsaaModified);
+        commands.entity(cam)
+        .insert(Msaa::Off)
+        .insert(NoIndirectDrawing)
+        .insert(CamModified);
     }
 }
 
@@ -162,14 +164,6 @@ fn adjust_near_plane(query: Query<&mut Projection, With<Camera3d>>) {
         }
     }
     
-}
-
-fn disable_indirect(
-    mut commands: Commands,
-    cameras: Query<Entity, (With<Camera>, Without<NoIndirectDrawing>)>,) {
-    for entity in cameras {
-        commands.entity(entity).insert(bevy::render::view::NoIndirectDrawing);
-    }
 }
 
 #[derive(Component)]
