@@ -140,7 +140,7 @@ fn main() {
 struct CamModified;
 
 fn modify_msaa(cams: Query<Entity, (With<Camera>, Without<CamModified>)>, mut commands: Commands) {
-   for cam in &cams {
+    for cam in &cams {
         commands.entity(cam)
         .insert(Msaa::Off)
         .insert(NoIndirectDrawing)
@@ -187,7 +187,7 @@ fn setup_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
         });
     }
     commands.insert_resource(AssetElementList { elements });
-    info!("Maze elements loaded!");
+    info!("gltf elements loaded!");
 }
 
 fn setup_mesh_and_animation(
