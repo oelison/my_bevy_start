@@ -7,14 +7,58 @@ repository = "https://github.com/oelison/my_bevy_start"
 publish = false
 
 [dependencies]
-bevy = { version = "0.16.1", default-features = false, features = [ 
-        "jpeg", "bevy_gltf", "bevy_scene", "animation", "android-native-activity", "multi_threaded", "tonemapping_luts" 
-    ] }
-bevy_mod_openxr = "0.3.0"
-bevy_mod_xr = "0.3.0"
-bevy_xr_utils = "0.3.0"
+# common (desktop / linux) features
+bevy = { version = "0.17.2", default-features = false, features = [
+    "zstd_rust", "jpeg", "png", "bevy_gltf", "bevy_scene", "animation", "multi_threaded", "tonemapping_luts"
+] }
+bevy_gizmos = "0.17.2"
+bevy_mod_openxr = "0.4.0"
+bevy_mod_xr = "0.4.0"
+bevy_xr_utils = "0.4.0"
 openxr = "0.19.0"
-schminput = { version = "0.3.0", features = ["xr"] }
+schminput = { path = "../Schminput", features = ["xr"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+# Android-only features (won't be compiled on Linux)
+bevy = { version = "0.17.2", default-features = false, features = [
+    "android-native-activity",
+    "animation",
+    "bevy_animation",
+    "bevy_asset",
+    "bevy_camera",
+    "bevy_color",
+    "bevy_core_pipeline",
+    "bevy_gizmos",
+    "bevy_gltf",
+    "bevy_image",
+    "bevy_input_focus",
+    "bevy_light",
+    "bevy_log",
+    "bevy_mesh",
+    "bevy_pbr",
+    "bevy_picking",
+    "bevy_render",
+    "bevy_scene",
+    "bevy_shader",
+    "bevy_state",
+    "bevy_window",
+    "bevy_winit",
+    "jpeg",
+    "multi_threaded",
+    "png",
+    "tonemapping_luts",
+    "zstd_rust",
+    "debug",
+] }
+bevy_gizmos = "0.17.2"
+bevy_mod_openxr = { version = "0.4.0", features = [
+    "window_support",
+    "fb_passthrough",
+] }
+bevy_mod_xr = "0.4.0"
+bevy_xr_utils = "0.4.0"
+openxr = "0.19.0"
+schminput = { path = "../Schminput", features = ["xr"] }
 
 [build-dependencies]
 reqwest = { version = "0.12", features = ["blocking"] }
@@ -30,7 +74,7 @@ crate-type = ["rlib", "cdylib"]
 
 # This metadata is used by `cargo-apk` - `xbuild` uses the `manifest.yaml` instead.
 [package.metadata.android]
-package = "org.bevyengine.example_openxr_android"
+package = "de.sciphy.my_bevy_start"
 build_targets = ["aarch64-linux-android"]
 runtime_libs = "runtime_libs"
 apk_name = "my_bevy_start"
@@ -41,7 +85,7 @@ label = "My Bevy start"
 strip = "strip"
 
 [package.metadata.android.sdk]
-target_sdk_version = 33
+target_sdk_version = 36
 
 [package.metadata.android.application.activity]
 theme = "@android:style/Theme.Black.NoTitleBar.Fullscreen"

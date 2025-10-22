@@ -6,12 +6,13 @@
 mod asset_handler;
 use asset_handler::{AssetElement, AssetElementList, ASSET_ELEMENTS, MAX_ASSET_ELEMENTS};
 
+use core::f32;
 use std::{f32::consts::FRAC_PI_4, ops::DerefMut};
 
 use bevy_mod_openxr::session::OxrSession;
 
 use bevy::{
-    color::palettes::css::{self, WHITE}, prelude::*, render::view::NoIndirectDrawing, scene::SceneInstanceReady
+    animation::AnimationTarget, camera::primitives::Aabb, color::palettes::css::{self, WHITE}, gltf::{GltfMaterialName, GltfMeshExtras, GltfMeshName}, light::{AmbientLight, CascadeShadowConfigBuilder, DirectionalLight}, log::LogPlugin, mesh::{morph::MeshMorphWeights, skinning::SkinnedMesh}, prelude::*, render::view::NoIndirectDrawing, scene::SceneInstanceReady
 };
 use bevy_mod_openxr::{
     add_xr_plugins,
@@ -23,10 +24,11 @@ use bevy_mod_openxr::{
 use bevy_mod_xr::session::{XrSessionCreated, XrTrackingRoot};
 use bevy_mod_xr::camera::XrProjection;
 use bevy_xr_utils::transform_utils::{self};
-use openxr::EnvironmentBlendMode;
 use bevy::prelude::MorphWeights;
 use schminput::prelude::*;
 use bevy::input::mouse::MouseMotion;
+
+use bevy::asset::AssetMetaCheck;
 
 #[derive(Component, Clone, Copy)]
 struct HandLeft;
@@ -84,13 +86,31 @@ struct AnimationToPlay {
 
 #[bevy_main]
 fn main() {
+    unsafe {
+        std::env::set_var("RUST_BACKTRACE", "1");
+        std::env::set_var("RUST_LOG", "wgpu=trace,bevy_render=debug,bevy_gltf=debug,bevy_asset=debug");
+        std::env::set_var("WGPU_BACKEND", "vulkan");
+        std::env::set_var("WGPU_TRACE", "/sdcard/wgpu_trace");
+    }
+
     App::new()
         .add_plugins(
             add_xr_plugins(DefaultPlugins).build()
+            .set(AssetPlugin {
+                meta_check: AssetMetaCheck::Never,
+                ..default()
+            })
+            .set(
+                LogPlugin {
+                    filter: "wgpu=info,bevy_render=info,bevy_asset=debug,bevy_gltf=debug".into(),
+                    ..default()
+                }
+            )
             .set(
                 OxrInitPlugin {
                     exts: {
                         let mut exts = OxrExtensions::default();
+                        exts.enable_fb_passthrough();
                         exts.ext_hp_mixed_reality_controller = true;
                         exts
                     },
@@ -109,10 +129,6 @@ fn main() {
             ),
         )
         .insert_resource(OxrSessionConfig {
-            blend_modes: Some({vec![
-                    EnvironmentBlendMode::ALPHA_BLEND,
-                    EnvironmentBlendMode::OPAQUE,
-                ]}),
             ..OxrSessionConfig::default()
         })
         .add_plugins(schminput::DefaultSchminputPlugins)
@@ -122,16 +138,37 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(Startup, setup2)
         .add_systems(XrSessionCreated, create_view_space)
-        .add_systems(Update, modify_msaa)
+        .add_systems(Update, modify_cams)
         .add_systems(Update, adjust_near_plane)
         .add_systems(Update, update_morph_targets)
         .add_systems(Update, run)
         .add_systems(Update, snap_turn_system)
         .add_systems(Update, move_keyboard)
         .add_systems(Update, mouse_look_system)
+        .add_systems(Update, animate_light_direction)
         .add_systems(Update, spawn_new_scene)
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(TurnState::default())
+        .register_type::<Transform>()
+        .register_type::<GlobalTransform>()
+        .register_type::<TransformTreeChanged>()
+        .register_type::<ChildOf>()
+        .register_type::<Children>()
+        .register_type::<Visibility>()
+        .register_type::<InheritedVisibility>()
+        .register_type::<ViewVisibility>()
+        .register_type::<Name>()
+        .register_type::<AnimationTarget>()
+        .register_type::<MorphWeights>()
+        .register_type::<AnimationPlayer>()
+        .register_type::<Mesh3d>()
+        .register_type::<MeshMorphWeights>()
+        .register_type::<Aabb>()
+        .register_type::<GltfExtras>()
+        .register_type::<GltfMeshExtras>()
+        .register_type::<GltfMeshName>()
+        .register_type::<GltfMaterialName>()
+        .register_type::<SkinnedMesh>()
         .insert_resource(MouseState::default())
         .run();
 }
@@ -139,7 +176,7 @@ fn main() {
 #[derive(Component)]
 struct CamModified;
 
-fn modify_msaa(cams: Query<Entity, (With<Camera>, Without<CamModified>)>, mut commands: Commands) {
+fn modify_cams(cams: Query<Entity, (With<Camera>, Without<CamModified>)>, mut commands: Commands) {
     for cam in &cams {
         commands.entity(cam)
         .insert(Msaa::Off)
@@ -152,8 +189,8 @@ fn adjust_near_plane(query: Query<&mut Projection, With<Camera3d>>) {
     // Safely get the single camera projection if present and adjust its near plane when it's perspective.
     for mut projection in query {
         match projection.deref_mut() {
-            Projection::Perspective(perspective_projection) => perspective_projection.near = 0.1,
-            Projection::Orthographic(orthographic_projection) => orthographic_projection.near = 0.1,
+            Projection::Perspective(perspective_projection) => perspective_projection.near = 0.003,
+            Projection::Orthographic(orthographic_projection) => orthographic_projection.near = 0.003,
             Projection::Custom(custom_projection) => {
                 if let Some(xr) = custom_projection.get_mut::<XrProjection>() {
                     xr.near = 0.1;
@@ -173,18 +210,16 @@ fn create_view_space(
     session: Res<OxrSession>, 
     mut commands: Commands
 ) {
-    let space = session.create_reference_space(openxr::ReferenceSpaceType::VIEW, Transform::IDENTITY).unwrap();
+    let space = session.create_reference_space(openxr::ReferenceSpaceType::VIEW, Isometry3d::IDENTITY).unwrap();
     // get the XrSpace out of the XrReferenceSpace
     commands.spawn((HeadsetView,space.0));
 }
 
 fn setup_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let mut elements = Vec::with_capacity(MAX_ASSET_ELEMENTS);
-    for asset in ASSET_ELEMENTS.iter().take(MAX_ASSET_ELEMENTS) {
+    let mut elements = vec![];
+    for asset in ASSET_ELEMENTS {
         info!("Loading asset: {}", asset.file_name);
-        elements.push(AssetElement {
-            asset: asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset.file_name)),
-        });
+        elements.push(AssetElement { asset: asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset.file_name)) });
     }
     commands.insert_resource(AssetElementList { elements });
     info!("gltf elements loaded!");
@@ -222,7 +257,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("move", "Move", player_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/thumbstick"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/thumbstick"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/thumbstick"]),
             Vec2ActionValue::new(),
         ))
         .id();
@@ -230,7 +265,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("turn", "Turn", player_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/thumbstick"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/thumbstick"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/thumbstick"]),
             Vec2ActionValue::new(),
         ))
         .id();
@@ -238,7 +273,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("look", "Look", player_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller",["/user/hand/right/input/thumbstick/x"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE,["/user/hand/right/input/thumbstick/x"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE,["/user/hand/right/input/thumbstick/x"]),
             F32ActionValue::new(),
         ))
         .id();
@@ -246,7 +281,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("new_scene", "New scene", player_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/a/click"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/a/click"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/a/click"]),
             KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::KeyI)),
             GamepadBindings::new()
                 .bind(GamepadBinding::new(GamepadBindingSource::South).button_just_pressed()),
@@ -299,7 +334,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("center_camera", "Center Camera", player_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/y/click"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/y/click"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/y/click"]),
             GamepadBindings::new()
                 .bind(GamepadBinding::new(GamepadBindingSource::East).button_just_pressed()),
             BoolActionValue::new(),
@@ -311,7 +346,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("hand_left_pose", "Left Hand Pose", pose_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/grip/pose"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/grip/pose"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/grip/pose"]),
             AttachSpaceToEntity(left_hand),
             SpaceActionValue::new(),
         ))
@@ -320,7 +355,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("hand_right_pose", "Right Hand Pose", pose_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/aim/pose"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/aim/pose"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/aim/pose"]),
             AttachSpaceToEntity(right_hand),
             SpaceActionValue::new(),
         ))
@@ -351,7 +386,22 @@ fn setup2(mut cmds: Commands) {
 fn setup(
     mut commands: Commands,
 ) {
-    // ambient light only
+    commands.spawn((
+        DirectionalLight {
+            shadows_enabled: true,
+            ..default()
+        },
+        // This is a relatively small scene, so use tighter shadow
+        // cascade bounds than the default for better quality.
+        // We also adjusted the shadow map to be larger since we're
+        // only using a single cascade.
+        CascadeShadowConfigBuilder {
+            num_cascades: 1,
+            maximum_distance: 4.0,
+            ..default()
+        }
+        .build(),
+    ));
     commands.insert_resource(
         AmbientLight {
             color: WHITE.into(),
@@ -415,7 +465,7 @@ fn move_keyboard(
 fn mouse_look_system(
     mut mouse_state: ResMut<MouseState>,
     mut camera_query: Query<&mut Transform, With<KeyboardCamera>>,
-    mut mouse_motion_events: EventReader<MouseMotion>,
+    mut mouse_motion_events: MessageReader<MouseMotion>,
 ) {
     
     let mut delta = Vec2::ZERO;
@@ -477,7 +527,7 @@ fn spawn_new_scene(
         move_actions.shown_scene = 0;
     }
     for entity in query.iter() {
-        info!("{}", entity.index().to_string());
+        info!("despawn: {}", entity.index().to_string());
         commands.entity(entity).despawn();
     }
     // Function to spawn a new scene if needed
@@ -492,10 +542,23 @@ fn spawn_new_scene(
     }
 }
 
+fn animate_light_direction(
+    time: Res<Time>,
+    mut query: Query<&mut Transform, With<DirectionalLight>>,
+) {
+    for mut transform in &mut query {
+        transform.rotation = Quat::from_euler(
+            EulerRot::ZYX,
+            0.0,
+            time.elapsed_secs() * f32::consts::PI / 5.0,
+            -FRAC_PI_4,
+        );
+    }
+}
 // is called when the scene is loaded
 // this is where we play the animation (head nodding)
 fn play_animation_when_ready(
-    trigger: Trigger<SceneInstanceReady>,
+    trigger: On<SceneInstanceReady>,
     mut commands: Commands,
     children: Query<&Children>,
     animations_to_play: Query<&AnimationToPlay>,
@@ -503,12 +566,12 @@ fn play_animation_when_ready(
 ) {
     // The entity we spawned in `setup_mesh_and_animation` is the trigger's target.
     // Start by finding the AnimationToPlay component we added to that entity.
-    if let Ok(animation_to_play) = animations_to_play.get(trigger.target()) {
+    if let Ok(animation_to_play) = animations_to_play.get(trigger.entity) {
         // The SceneRoot component will have spawned the scene as a hierarchy
         // of entities parented to our entity. Since the asset contained a skinned
         // mesh and animations, it will also have spawned an animation player
         // component. Search our entity's descendants to find the animation player.
-        for child in children.iter_descendants(trigger.target()) {
+        for child in children.iter_descendants(trigger.entity) {
             if let Ok(mut player) = players.get_mut(child) {
                 // Tell the animation player to start the animation and keep
                 // repeating it.
@@ -532,7 +595,7 @@ fn run(
     vec2_value: Query<&Vec2ActionValue>,
     left_hand: Query<&GlobalTransform, With<HandLeft>>,
     right_hand: Query<&GlobalTransform, With<HandRight>>,
-    mut gizmos: Gizmos,
+    mut gizmos: bevy_gizmos::gizmos::Gizmos,
     mut root_query: Query<&mut Transform, With<XrTrackingRoot>>,
 ) {
     let movevals = vec2_value.get(move_actions.move_action).unwrap().any;

@@ -2,7 +2,7 @@ android:
   runtime_libs:
     - "runtime_libs"
   manifest:
-    package: "org.bevyengine.my_bevy_start"
+    package: "de.sciphy.my_bevy_start"
     uses_feature:
       - name: "android.hardware.vr.headtracking"
         required: true
