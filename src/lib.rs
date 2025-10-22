@@ -23,7 +23,6 @@ use bevy_mod_openxr::{
 use bevy_mod_xr::session::{XrSessionCreated, XrTrackingRoot};
 use bevy_mod_xr::camera::XrProjection;
 use bevy_xr_utils::transform_utils::{self};
-use openxr::EnvironmentBlendMode;
 use bevy::prelude::MorphWeights;
 use schminput::prelude::*;
 use bevy::input::mouse::MouseMotion;
@@ -91,6 +90,7 @@ fn main() {
                 OxrInitPlugin {
                     exts: {
                         let mut exts = OxrExtensions::default();
+                        exts.enable_fb_passthrough();
                         exts.ext_hp_mixed_reality_controller = true;
                         exts
                     },
@@ -109,10 +109,6 @@ fn main() {
             ),
         )
         .insert_resource(OxrSessionConfig {
-            blend_modes: Some({vec![
-                    EnvironmentBlendMode::ALPHA_BLEND,
-                    EnvironmentBlendMode::OPAQUE,
-                ]}),
             ..OxrSessionConfig::default()
         })
         .add_plugins(schminput::DefaultSchminputPlugins)
@@ -152,8 +148,8 @@ fn adjust_near_plane(query: Query<&mut Projection, With<Camera3d>>) {
     // Safely get the single camera projection if present and adjust its near plane when it's perspective.
     for mut projection in query {
         match projection.deref_mut() {
-            Projection::Perspective(perspective_projection) => perspective_projection.near = 0.1,
-            Projection::Orthographic(orthographic_projection) => orthographic_projection.near = 0.1,
+            Projection::Perspective(perspective_projection) => perspective_projection.near = 0.003,
+            Projection::Orthographic(orthographic_projection) => orthographic_projection.near = 0.003,
             Projection::Custom(custom_projection) => {
                 if let Some(xr) = custom_projection.get_mut::<XrProjection>() {
                     xr.near = 0.1;
@@ -173,17 +169,17 @@ fn create_view_space(
     session: Res<OxrSession>, 
     mut commands: Commands
 ) {
-    let space = session.create_reference_space(openxr::ReferenceSpaceType::VIEW, Transform::IDENTITY).unwrap();
+    let space = session.create_reference_space(openxr::ReferenceSpaceType::VIEW, Isometry3d::IDENTITY).unwrap();
     // get the XrSpace out of the XrReferenceSpace
     commands.spawn((HeadsetView,space.0));
 }
 
 fn setup_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let mut elements = Vec::with_capacity(MAX_ASSET_ELEMENTS);
-    for asset in ASSET_ELEMENTS.iter().take(MAX_ASSET_ELEMENTS) {
-        info!("Loading asset: {}", asset.file_name);
+    let mut elements = vec![];
+    for i in 0..MAX_ASSET_ELEMENTS {
+        info!("Loading asset: {}", ASSET_ELEMENTS[i].file_name);
         elements.push(AssetElement {
-            asset: asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset.file_name)),
+            asset: asset_server.load(GltfAssetLabel::Scene(0).from_asset(ASSET_ELEMENTS[i].file_name)),
         });
     }
     commands.insert_resource(AssetElementList { elements });
@@ -222,7 +218,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("move", "Move", player_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/thumbstick"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/thumbstick"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/thumbstick"]),
             Vec2ActionValue::new(),
         ))
         .id();
@@ -230,7 +226,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("turn", "Turn", player_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/thumbstick"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/thumbstick"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/thumbstick"]),
             Vec2ActionValue::new(),
         ))
         .id();
@@ -238,7 +234,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("look", "Look", player_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller",["/user/hand/right/input/thumbstick/x"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE,["/user/hand/right/input/thumbstick/x"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE,["/user/hand/right/input/thumbstick/x"]),
             F32ActionValue::new(),
         ))
         .id();
@@ -246,7 +242,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("new_scene", "New scene", player_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/a/click"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/a/click"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/a/click"]),
             KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::KeyI)),
             GamepadBindings::new()
                 .bind(GamepadBinding::new(GamepadBindingSource::South).button_just_pressed()),
@@ -299,7 +295,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("center_camera", "Center Camera", player_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/y/click"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/y/click"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/y/click"]),
             GamepadBindings::new()
                 .bind(GamepadBinding::new(GamepadBindingSource::East).button_just_pressed()),
             BoolActionValue::new(),
@@ -311,7 +307,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("hand_left_pose", "Left Hand Pose", pose_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/grip/pose"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/grip/pose"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/grip/pose"]),
             AttachSpaceToEntity(left_hand),
             SpaceActionValue::new(),
         ))
@@ -320,7 +316,7 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("hand_right_pose", "Right Hand Pose", pose_set),
             //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/aim/pose"]),
-            OxrBindings::new().bindngs(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/aim/pose"]),
+            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/aim/pose"]),
             AttachSpaceToEntity(right_hand),
             SpaceActionValue::new(),
         ))
@@ -350,8 +346,23 @@ fn setup2(mut cmds: Commands) {
 
 fn setup(
     mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // ambient light only
+    // circular base
+    // commands.spawn((
+    //     Mesh3d(meshes.add(Circle::new(4.0))),
+    //     MeshMaterial3d(materials.add(Color::srgb_u8(255, 0, 0))),
+    //     Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+    // ));
+    // commands.spawn((
+    //     PointLight {
+    //         shadows_enabled: false,
+    //         intensity: 1000.0,
+    //         ..default()
+    //     },
+    //     Transform::from_xyz(4.0, 8.0, 4.0),
+    // ));
     commands.insert_resource(
         AmbientLight {
             color: WHITE.into(),
@@ -415,7 +426,7 @@ fn move_keyboard(
 fn mouse_look_system(
     mut mouse_state: ResMut<MouseState>,
     mut camera_query: Query<&mut Transform, With<KeyboardCamera>>,
-    mut mouse_motion_events: EventReader<MouseMotion>,
+    mut mouse_motion_events: MessageReader<MouseMotion>,
 ) {
     
     let mut delta = Vec2::ZERO;
@@ -495,7 +506,7 @@ fn spawn_new_scene(
 // is called when the scene is loaded
 // this is where we play the animation (head nodding)
 fn play_animation_when_ready(
-    trigger: Trigger<SceneInstanceReady>,
+    trigger: On<SceneInstanceReady>,
     mut commands: Commands,
     children: Query<&Children>,
     animations_to_play: Query<&AnimationToPlay>,
@@ -503,12 +514,12 @@ fn play_animation_when_ready(
 ) {
     // The entity we spawned in `setup_mesh_and_animation` is the trigger's target.
     // Start by finding the AnimationToPlay component we added to that entity.
-    if let Ok(animation_to_play) = animations_to_play.get(trigger.target()) {
+    if let Ok(animation_to_play) = animations_to_play.get(trigger.entity) {
         // The SceneRoot component will have spawned the scene as a hierarchy
         // of entities parented to our entity. Since the asset contained a skinned
         // mesh and animations, it will also have spawned an animation player
         // component. Search our entity's descendants to find the animation player.
-        for child in children.iter_descendants(trigger.target()) {
+        for child in children.iter_descendants(trigger.entity) {
             if let Ok(mut player) = players.get_mut(child) {
                 // Tell the animation player to start the animation and keep
                 // repeating it.
@@ -532,7 +543,7 @@ fn run(
     vec2_value: Query<&Vec2ActionValue>,
     left_hand: Query<&GlobalTransform, With<HandLeft>>,
     right_hand: Query<&GlobalTransform, With<HandRight>>,
-    mut gizmos: Gizmos,
+    mut gizmos: bevy_gizmos::gizmos::Gizmos,
     mut root_query: Query<&mut Transform, With<XrTrackingRoot>>,
 ) {
     let movevals = vec2_value.get(move_actions.move_action).unwrap().any;
