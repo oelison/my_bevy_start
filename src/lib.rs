@@ -122,7 +122,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(Startup, setup2)
         .add_systems(XrSessionCreated, create_view_space)
-        .add_systems(Update, modify_msaa)
+        .add_systems(Update, modify_cams)
         .add_systems(Update, adjust_near_plane)
         .add_systems(Update, update_morph_targets)
         .add_systems(Update, run)
@@ -139,7 +139,7 @@ fn main() {
 #[derive(Component)]
 struct CamModified;
 
-fn modify_msaa(cams: Query<Entity, (With<Camera>, Without<CamModified>)>, mut commands: Commands) {
+fn modify_cams(cams: Query<Entity, (With<Camera>, Without<CamModified>)>, mut commands: Commands) {
     for cam in &cams {
         commands.entity(cam)
         .insert(Msaa::Off)
