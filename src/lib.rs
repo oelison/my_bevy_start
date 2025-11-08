@@ -5,6 +5,7 @@
 
 mod asset_handler;
 use asset_handler::{AssetElement, AssetElementList, ASSET_ELEMENTS, MAX_ASSET_ELEMENTS};
+// use bevy_audio::AudioPlugin;
 
 use core::f32;
 use std::{f32::consts::FRAC_PI_4, ops::DerefMut};
@@ -12,7 +13,7 @@ use std::{f32::consts::FRAC_PI_4, ops::DerefMut};
 use bevy_mod_openxr::session::OxrSession;
 
 use bevy::{
-    animation::AnimationTarget, camera::primitives::Aabb, color::palettes::css::{self, WHITE}, gltf::{GltfMaterialName, GltfMeshExtras, GltfMeshName}, light::{AmbientLight, CascadeShadowConfigBuilder, DirectionalLight}, log::LogPlugin, mesh::{morph::MeshMorphWeights, skinning::SkinnedMesh}, prelude::*, render::view::NoIndirectDrawing, scene::SceneInstanceReady
+    animation::AnimationTarget, color::palettes::basic::{LIME, RED}, time::Stopwatch, camera::primitives::Aabb, color::palettes::css::{self, WHITE}, gltf::{GltfMaterialName, GltfMeshExtras, GltfMeshName}, light::{AmbientLight, CascadeShadowConfigBuilder, DirectionalLight}, log::LogPlugin, mesh::{morph::MeshMorphWeights, skinning::SkinnedMesh}, prelude::*, render::view::NoIndirectDrawing, scene::SceneInstanceReady
 };
 use bevy_mod_openxr::{
     add_xr_plugins,
@@ -84,13 +85,18 @@ struct AnimationToPlay {
     index: AnimationNodeIndex,
 }
 
+// #[derive(Component, Default)]
+// struct Emitter {
+//     stopwatch: Stopwatch,
+// }
+
 #[bevy_main]
 fn main() {
     unsafe {
-        std::env::set_var("RUST_BACKTRACE", "1");
-        std::env::set_var("RUST_LOG", "wgpu=trace,bevy_render=debug,bevy_gltf=debug,bevy_asset=debug");
-        std::env::set_var("WGPU_BACKEND", "vulkan");
-        std::env::set_var("WGPU_TRACE", "/sdcard/wgpu_trace");
+        // std::env::set_var("RUST_BACKTRACE", "1");
+        // std::env::set_var("RUST_LOG", "wgpu=trace,bevy_render=debug,bevy_gltf=debug,bevy_asset=debug");
+        // std::env::set_var("WGPU_BACKEND", "vulkan");
+        // std::env::set_var("WGPU_TRACE", "/sdcard/wgpu_trace");
     }
 
     App::new()
@@ -126,7 +132,7 @@ fn main() {
                     }),
                     ..default()
                 }
-            ),
+            )
         )
         .insert_resource(OxrSessionConfig {
             ..OxrSessionConfig::default()
@@ -147,28 +153,10 @@ fn main() {
         .add_systems(Update, mouse_look_system)
         .add_systems(Update, animate_light_direction)
         .add_systems(Update, spawn_new_scene)
+        // .add_systems(Update, update_positions)
+        // .add_systems(Update, update_listener)
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(TurnState::default())
-        .register_type::<Transform>()
-        .register_type::<GlobalTransform>()
-        .register_type::<TransformTreeChanged>()
-        .register_type::<ChildOf>()
-        .register_type::<Children>()
-        .register_type::<Visibility>()
-        .register_type::<InheritedVisibility>()
-        .register_type::<ViewVisibility>()
-        .register_type::<Name>()
-        .register_type::<AnimationTarget>()
-        .register_type::<MorphWeights>()
-        .register_type::<AnimationPlayer>()
-        .register_type::<Mesh3d>()
-        .register_type::<MeshMorphWeights>()
-        .register_type::<Aabb>()
-        .register_type::<GltfExtras>()
-        .register_type::<GltfMeshExtras>()
-        .register_type::<GltfMeshName>()
-        .register_type::<GltfMaterialName>()
-        .register_type::<SkinnedMesh>()
         .insert_resource(MouseState::default())
         .run();
 }
@@ -230,7 +218,11 @@ fn setup_mesh_and_animation(
     asset_elements: Res<AssetElementList>,
     asset_server: Res<AssetServer>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
+    // mut meshes: ResMut<Assets<Mesh>>,
+    // mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    // let gap = 4.0; // space between two ears
+
     if let Some(handle) = asset_elements.get_by_index(0) {
         let (graph, index) = AnimationGraph::from_clip(
             asset_server.load(GltfAssetLabel::Animation(0).from_asset(ASSET_ELEMENTS[0].file_name)),
@@ -246,9 +238,76 @@ fn setup_mesh_and_animation(
         let _entity = commands.spawn((
             animation_to_play,
             mesh_scene,
+            // Emitter::default(),
+            // bevy_audio::AudioPlayer::new(asset_server.load("laser.wav")),
+            // bevy_audio::PlaybackSettings::LOOP.with_spatial(true),
         )).observe(play_animation_when_ready).id();
     }
+    // let listener = bevy_audio::SpatialListener::new(gap);
+    // commands.spawn((
+    //     Transform::default(),
+    //     Visibility::default(),
+    //     listener.clone(),
+    //     children![
+    //         // left ear indicator
+    //         (
+    //             Mesh3d(meshes.add(Cuboid::new(0.2, 0.2, 0.2))),
+    //             MeshMaterial3d(materials.add(Color::from(RED))),
+    //             Transform::from_translation(listener.left_ear_offset),
+    //         ),
+    //         // right ear indicator
+    //         (
+    //             Mesh3d(meshes.add(Cuboid::new(0.2, 0.2, 0.2))),
+    //             MeshMaterial3d(materials.add(Color::from(LIME))),
+    //             Transform::from_translation(listener.right_ear_offset),
+    //         )
+    //     ],
+    // ));
 }
+
+// fn update_positions(
+//     time: Res<Time>,
+//     mut emitters: Query<(&mut Transform, &mut Emitter), With<Emitter>>,
+//     keyboard: Res<ButtonInput<KeyCode>>,
+// ) {
+//     for (mut emitter_transform, mut emitter) in emitters.iter_mut() {
+//         if keyboard.just_pressed(KeyCode::Space) {
+//             if emitter.stopwatch.is_paused() {
+//                 emitter.stopwatch.unpause();
+//             } else {
+//                 emitter.stopwatch.pause();
+//             }
+//         }
+
+//         emitter.stopwatch.tick(time.delta());
+
+//         if !emitter.stopwatch.is_paused() {
+//             emitter_transform.translation.x = ops::sin(emitter.stopwatch.elapsed_secs()) * 3.0;
+//             emitter_transform.translation.z = ops::cos(emitter.stopwatch.elapsed_secs()) * 3.0;
+//         }
+//     }
+// }
+
+// fn update_listener(
+//     keyboard: Res<ButtonInput<KeyCode>>,
+//     time: Res<Time>,
+//     mut listeners: Single<&mut Transform, With<bevy_audio::SpatialListener>>,
+// ) {
+//     let speed = 2.;
+
+//     if keyboard.pressed(KeyCode::ArrowRight) {
+//         listeners.translation.x += speed * time.delta_secs();
+//     }
+//     if keyboard.pressed(KeyCode::ArrowLeft) {
+//         listeners.translation.x -= speed * time.delta_secs();
+//     }
+//     if keyboard.pressed(KeyCode::ArrowDown) {
+//         listeners.translation.z += speed * time.delta_secs();
+//     }
+//     if keyboard.pressed(KeyCode::ArrowUp) {
+//         listeners.translation.z -= speed * time.delta_secs();
+//     }
+// }
 
 fn setup2(mut cmds: Commands) {
     let player_set = cmds.spawn(ActionSet::new("player", "Player", 1)).id();
