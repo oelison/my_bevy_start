@@ -315,32 +315,36 @@ fn setup2(mut cmds: Commands) {
     let move_action = cmds
         .spawn((
             Action::new("move", "Move", player_set),
-            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/thumbstick"]),
-            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/thumbstick"]),
+            OxrBindings::new()
+                .bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/thumbstick"])
+                .bindings(HP_MIXED_REALITY_PROFILE, ["/user/hand/left/input/thumbstick"]),
             Vec2ActionValue::new(),
         ))
         .id();
     let turn_action = cmds
         .spawn((
             Action::new("turn", "Turn", player_set),
-            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/thumbstick"]),
-            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/thumbstick"]),
+            OxrBindings::new()
+                .bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/thumbstick"])
+                .bindings(HP_MIXED_REALITY_PROFILE, ["/user/hand/right/input/thumbstick"]),
             Vec2ActionValue::new(),
         ))
         .id();
     let look = cmds
         .spawn((
             Action::new("look", "Look", player_set),
-            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller",["/user/hand/right/input/thumbstick/x"]),
-            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE,["/user/hand/right/input/thumbstick/x"]),
+            OxrBindings::new()
+                .bindings(OCULUS_TOUCH_PROFILE,["/user/hand/right/input/thumbstick/x"])
+                .bindings(HP_MIXED_REALITY_PROFILE,["/user/hand/right/input/thumbstick/x"]),
             F32ActionValue::new(),
         ))
         .id();
     let new_scene = cmds
         .spawn((
             Action::new("new_scene", "New scene", player_set),
-            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/a/click"]),
-            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/a/click"]),
+            OxrBindings::new()
+                .bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/a/click"])
+                .bindings(HP_MIXED_REALITY_PROFILE, ["/user/hand/right/input/a/click"]),
             KeyboardBindings::new().bind(KeyboardBinding::new(KeyCode::KeyI)),
             GamepadBindings::new()
                 .bind(GamepadBinding::new(GamepadBindingSource::South).button_just_pressed()),
@@ -392,8 +396,9 @@ fn setup2(mut cmds: Commands) {
     let center_camera = cmds
         .spawn((
             Action::new("center_camera", "Center Camera", player_set),
-            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/y/click"]),
-            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/y/click"]),
+            OxrBindings::new()
+                .bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/y/click"])
+                .bindings(HP_MIXED_REALITY_PROFILE, ["/user/hand/left/input/y/click"]),
             GamepadBindings::new()
                 .bind(GamepadBinding::new(GamepadBindingSource::East).button_just_pressed()),
             BoolActionValue::new(),
@@ -404,8 +409,9 @@ fn setup2(mut cmds: Commands) {
     let left_pose = cmds
         .spawn((
             Action::new("hand_left_pose", "Left Hand Pose", pose_set),
-            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/left/input/grip/pose"]),
-            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/grip/pose"]),
+            OxrBindings::new()
+                .bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/grip/pose"])
+                .bindings(HP_MIXED_REALITY_PROFILE, ["/user/hand/left/input/grip/pose"]),
             AttachSpaceToEntity(left_hand),
             SpaceActionValue::new(),
         ))
@@ -413,8 +419,9 @@ fn setup2(mut cmds: Commands) {
     let right_pose = cmds
         .spawn((
             Action::new("hand_right_pose", "Right Hand Pose", pose_set),
-            //OxrBindings::new().bindngs("/interaction_profiles/hp/mixed_reality_controller", ["/user/hand/right/input/aim/pose"]),
-            OxrBindings::new().bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/aim/pose"]),
+            OxrBindings::new()
+                .bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/aim/pose"])
+                .bindings(HP_MIXED_REALITY_PROFILE, ["/user/hand/right/input/aim/pose"]),
             AttachSpaceToEntity(right_hand),
             SpaceActionValue::new(),
         ))
