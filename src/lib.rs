@@ -13,11 +13,7 @@ use std::{f32::consts::FRAC_PI_4, ops::DerefMut};
 use bevy_mod_openxr::session::OxrSession;
 
 use bevy::{
-    color::palettes::css::{self, WHITE},
-    light::{CascadeShadowConfigBuilder, DirectionalLight},
-    prelude::*,
-    render::view::NoIndirectDrawing,
-    scene::SceneInstanceReady,
+    color::palettes::css::{self, WHITE}, light::{CascadeShadowConfigBuilder, DirectionalLight}, prelude::*, render::view::NoIndirectDrawing, scene::SceneInstanceReady
 };
 use bevy_mod_openxr::{
     add_xr_plugins,
@@ -30,7 +26,6 @@ use bevy_mod_xr::camera::XrProjection;
 use bevy_xr_utils::transform_utils::{self};
 use bevy::prelude::MorphWeights;
 use schminput::prelude::*;
-use bevy::asset::AssetMetaCheck;
 
 #[derive(Component, Clone, Copy)]
 struct HandLeft;
@@ -77,29 +72,23 @@ struct AnimationToPlay {
     index: AnimationNodeIndex,
 }
 
+#[derive(Component)]
+struct MyMusic;
+
 pub const HP_MIXED_REALITY_PROFILE: &str = "/interaction_profiles/htc/mixed_reality_controller";
 
 #[bevy_main]
 fn main() {
     App::new()
-        .add_plugins(
-            add_xr_plugins(DefaultPlugins).build()
-            .set(AssetPlugin {
-                meta_check: AssetMetaCheck::Never,
-                ..default()
-            })
-            .set(
-                OxrInitPlugin {
-                    exts: {
-                        let mut exts = OxrExtensions::default();
-                        exts.enable_fb_passthrough();
-                        exts.ext_hp_mixed_reality_controller = true;
-                        exts
-                    },
-                    ..default()
-                }
-            )
-        )
+        .add_plugins(add_xr_plugins(DefaultPlugins).set(OxrInitPlugin {
+            exts: {
+                let mut exts = OxrExtensions::default();
+                exts.enable_fb_passthrough();
+                exts.ext_hp_mixed_reality_controller = true;
+                exts
+            },
+            ..default()
+        }))
         .add_plugins(bevy_mod_openxr::features::fb_passthrough::OxrFbPassthroughPlugin)
         .add_plugins(schminput::DefaultSchminputPlugins)
         .add_plugins(transform_utils::TransformUtilitiesPlugin)
@@ -117,6 +106,7 @@ fn main() {
         .add_systems(Update, spawn_new_scene)
         .insert_resource(ClearColor(Color::NONE))
         .insert_resource(TurnState::default())
+        // .init_asset::<AudioSource>()
         .run();
 }
 
@@ -410,6 +400,7 @@ fn setup2(mut cmds: Commands) {
 
 fn setup(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
 ) {
     commands.spawn((
         DirectionalLight {
@@ -438,6 +429,10 @@ fn setup(
         Camera3d::default(),
         Transform::from_xyz(-2.5, 2.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
+    // commands.spawn((
+    //     AudioPlayer::new(asset_server.load("laser.ogg")),
+    //     MyMusic,
+    // ));
 }
 
 // is called when the app is running

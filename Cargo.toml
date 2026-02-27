@@ -6,27 +6,9 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/oelison/my_bevy_start"
 publish = false
 
-[dependencies]
 # common (desktop / linux) features
-bevy = { version = "0.18.0", default-features = false, features = [
-    "bevy_animation",
-    "bevy_asset",
-    "bevy_core_pipeline",
-    "bevy_gltf",
-    "bevy_gizmos",
-    "bevy_pbr",
-    "bevy_render",
-    "bevy_scene",
-    "bevy_winit",
-    "gltf_animation",
-    "jpeg",
-    "multi_threaded",
-    "png",
-    "reflect_auto_register",
-    "tonemapping_luts",
-    "x11",
-    "zstd_rust",
-] }
+[dependencies]
+bevy_ecs = "0.18.0"
 bevy_gizmos = "0.18.0"
 bevy_mod_openxr = { version = "0.5.0", features = [
     "window_support",
@@ -37,24 +19,26 @@ bevy_xr_utils = "0.5.0"
 openxr = "0.21.1"
 schminput = { version = "0.5.0", features = ["xr"] }
 
+[target.'cfg(not(target_os = "android"))'.dependencies]
+audio = "0.2.1"
+bevy = {version = "0.18.0" }
+
 [target.'cfg(target_os = "android")'.dependencies]
 # Android-only features (won't be compiled on Linux)
-bevy = { version = "0.18.0", default-features = false, features = [
+bevy = { version = "0.18", default-features = false, features = [
     "android-native-activity",
-    "bevy_animation",
-    "bevy_camera",
-    "bevy_color",
-    "bevy_image",
-    "bevy_input_focus",
-    "bevy_light",
-    "bevy_log",
-    "bevy_mesh",
-    "bevy_picking",
-    "bevy_shader",
-    "bevy_state",
-    "bevy_window",
-    "gltf_animation",
-    "debug",
+    "default_app",
+    "std",
+    "default_font",
+    "multi_threaded",
+    "sysinfo_plugin",
+    "2d_bevy_render",
+    "scene",
+    #"audio", # not working on android native
+    "picking",
+    "3d_bevy_render",
+    "ui_api",
+    "ui_bevy_render",
 ] }
 
 [build-dependencies]
