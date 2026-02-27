@@ -13,13 +13,16 @@ use std::{f32::consts::FRAC_PI_4, ops::DerefMut};
 use bevy_mod_openxr::session::OxrSession;
 
 use bevy::{
-    animation::AnimationTarget, color::palettes::basic::{LIME, RED}, time::Stopwatch, camera::primitives::Aabb, color::palettes::css::{self, WHITE}, gltf::{GltfMaterialName, GltfMeshExtras, GltfMeshName}, light::{AmbientLight, CascadeShadowConfigBuilder, DirectionalLight}, log::LogPlugin, mesh::{morph::MeshMorphWeights, skinning::SkinnedMesh}, prelude::*, render::view::NoIndirectDrawing, scene::SceneInstanceReady
+    color::palettes::css::{self, WHITE},
+    light::{CascadeShadowConfigBuilder, DirectionalLight},
+    prelude::*,
+    render::view::NoIndirectDrawing,
+    scene::SceneInstanceReady,
 };
 use bevy_mod_openxr::{
     add_xr_plugins,
     exts::OxrExtensions,
     init::OxrInitPlugin,
-    resources::OxrSessionConfig,
 };
 
 use bevy_mod_xr::session::{XrSessionCreated, XrTrackingRoot};
@@ -27,8 +30,6 @@ use bevy_mod_xr::camera::XrProjection;
 use bevy_xr_utils::transform_utils::{self};
 use bevy::prelude::MorphWeights;
 use schminput::prelude::*;
-use bevy::input::mouse::MouseMotion;
-
 use bevy::asset::AssetMetaCheck;
 
 #[derive(Component, Clone, Copy)]
@@ -69,15 +70,6 @@ struct TurnState {
     ready: bool,
 }
 
-#[derive(Component)]
-struct KeyboardCamera;
-
-#[derive(Resource, Default)]
-struct MouseState {
-    pitch: f32,
-    yaw: f32,
-}
-
 // the component that will be used to play the animation
 #[derive(Component)]
 struct AnimationToPlay {
@@ -85,20 +77,10 @@ struct AnimationToPlay {
     index: AnimationNodeIndex,
 }
 
-// #[derive(Component, Default)]
-// struct Emitter {
-//     stopwatch: Stopwatch,
-// }
+pub const HP_MIXED_REALITY_PROFILE: &str = "/interaction_profiles/htc/mixed_reality_controller";
 
 #[bevy_main]
 fn main() {
-    unsafe {
-        // std::env::set_var("RUST_BACKTRACE", "1");
-        // std::env::set_var("RUST_LOG", "wgpu=trace,bevy_render=debug,bevy_gltf=debug,bevy_asset=debug");
-        // std::env::set_var("WGPU_BACKEND", "vulkan");
-        // std::env::set_var("WGPU_TRACE", "/sdcard/wgpu_trace");
-    }
-
     App::new()
         .add_plugins(
             add_xr_plugins(DefaultPlugins).build()
@@ -107,12 +89,6 @@ fn main() {
                 ..default()
             })
             .set(
-                LogPlugin {
-                    filter: "wgpu=info,bevy_render=info,bevy_asset=debug,bevy_gltf=debug".into(),
-                    ..default()
-                }
-            )
-            .set(
                 OxrInitPlugin {
                     exts: {
                         let mut exts = OxrExtensions::default();
@@ -120,23 +96,11 @@ fn main() {
                         exts.ext_hp_mixed_reality_controller = true;
                         exts
                     },
-                    ..OxrInitPlugin::default()
-                }
-            )
-            .set(
-                WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "Bevy OpenXR Morph Target Example".to_string(),
-                        canvas: Some("#bevy-canvas".to_string()),
-                        ..default()
-                    }),
                     ..default()
                 }
             )
         )
-        .insert_resource(OxrSessionConfig {
-            ..OxrSessionConfig::default()
-        })
+        .add_plugins(bevy_mod_openxr::features::fb_passthrough::OxrFbPassthroughPlugin)
         .add_plugins(schminput::DefaultSchminputPlugins)
         .add_plugins(transform_utils::TransformUtilitiesPlugin)
         .add_systems(PreStartup, setup_assets)
@@ -149,15 +113,10 @@ fn main() {
         .add_systems(Update, update_morph_targets)
         .add_systems(Update, run)
         .add_systems(Update, snap_turn_system)
-        .add_systems(Update, move_keyboard)
-        .add_systems(Update, mouse_look_system)
         .add_systems(Update, animate_light_direction)
         .add_systems(Update, spawn_new_scene)
-        // .add_systems(Update, update_positions)
-        // .add_systems(Update, update_listener)
-        .insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(ClearColor(Color::NONE))
         .insert_resource(TurnState::default())
-        .insert_resource(MouseState::default())
         .run();
 }
 
@@ -469,7 +428,7 @@ fn setup(
         .build(),
     ));
     commands.insert_resource(
-        AmbientLight {
+        GlobalAmbientLight {
             color: WHITE.into(),
             brightness: 400.0,
             ..default()
@@ -479,79 +438,6 @@ fn setup(
         Camera3d::default(),
         Transform::from_xyz(-2.5, 2.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
-}
-
-fn move_keyboard(
-    move_actions: Res<MoveActions>,
-    bool_value: Query<&BoolActionValue>,
-    mut camera_query: Query<&mut Transform, With<KeyboardCamera>>,
-    time: Res<Time>,
-) {
-    let mut moved = false;
-    let mut direction = Vec3::ZERO;
-    let mut direction_up_down = Vec3::ZERO;
-    let speed = 1.0;
-
-    if bool_value.get(move_actions.move_left).unwrap().any {
-        direction.x -= 1.0;
-        moved = true;
-    }
-    if bool_value.get(move_actions.move_right).unwrap().any {
-        direction.x += 1.0;
-        moved = true;
-    }
-    if bool_value.get(move_actions.move_forward).unwrap().any {
-        direction.z -= 1.0;
-        moved = true;
-    }
-    if bool_value.get(move_actions.move_backward).unwrap().any {
-        direction.z += 1.0;
-        moved = true;
-    }
-    if bool_value.get(move_actions.move_up).unwrap().any {
-        direction_up_down.y += 1.0;
-        moved = true;
-    }
-    if bool_value.get(move_actions.move_down).unwrap().any {
-        direction_up_down.y -= 1.0;
-        moved = true;
-    }
-
-    if moved {
-        let delta = time.delta_secs();
-        for mut transform in camera_query.iter_mut() {
-            // Bewegung in Blickrichtung (lokaler Raum)
-            let mut local_direction = transform.rotation * direction.normalize_or_zero();
-            local_direction.y = 0.0; // Keine vertikale Bewegung durch Blickrichtung
-            transform.translation += (local_direction * speed + direction_up_down * speed) * delta;
-        }
-    }
-}
-
-fn mouse_look_system(
-    mut mouse_state: ResMut<MouseState>,
-    mut camera_query: Query<&mut Transform, With<KeyboardCamera>>,
-    mut mouse_motion_events: MessageReader<MouseMotion>,
-) {
-    
-    let mut delta = Vec2::ZERO;
-    for event in mouse_motion_events.read() {
-        delta += event.delta * 4.0; // scaling for higher sensitivity
-    }
-    if delta == Vec2::ZERO {
-        return;
-    }
-
-    // Empfindlichkeit anpassen
-    let sensitivity = 0.005;
-    mouse_state.yaw -= delta.x * sensitivity;
-    mouse_state.pitch -= delta.y * sensitivity;
-    mouse_state.pitch = mouse_state.pitch.clamp(-1.54, 1.54); // ca. +/- 88 Grad
-
-    for mut transform in camera_query.iter_mut() {
-        transform.rotation = Quat::from_axis_angle(Vec3::Y, mouse_state.yaw)
-            * Quat::from_axis_angle(Vec3::X, mouse_state.pitch);
-    }
 }
 
 // is called when the app is running
