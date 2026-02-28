@@ -369,8 +369,8 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("hand_right_pose", "Right Hand Pose", pose_set),
             OxrBindings::new()
-                .bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/aim/pose"])
-                .bindings(HP_MIXED_REALITY_PROFILE, ["/user/hand/right/input/aim/pose"]),
+                .bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/grip/pose"])
+                .bindings(HP_MIXED_REALITY_PROFILE, ["/user/hand/right/input/grip/pose"]),
             AttachSpaceToEntity(right_hand),
             SpaceActionValue::new(),
         ))
@@ -429,10 +429,10 @@ fn setup(
         Camera3d::default(),
         Transform::from_xyz(-2.5, 2.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
-    // commands.spawn((
-    //     AudioPlayer::new(asset_server.load("laser.ogg")),
-    //     MyMusic,
-    // ));
+    commands.spawn((
+        AudioPlayer::new(asset_server.load("laser.ogg")),
+        MyMusic,
+    ));
 }
 
 // is called when the app is running

@@ -27,6 +27,7 @@ bevy = {version = "0.18.0" }
 # Android-only features (won't be compiled on Linux)
 bevy = { version = "0.18", default-features = false, features = [
     "android-native-activity",
+    "android_shared_stdcxx",
     "default_app",
     "std",
     "default_font",
@@ -34,7 +35,7 @@ bevy = { version = "0.18", default-features = false, features = [
     "sysinfo_plugin",
     "2d_bevy_render",
     "scene",
-    #"audio", # not working on android native
+    "audio",
     "picking",
     "3d_bevy_render",
     "ui_api",
