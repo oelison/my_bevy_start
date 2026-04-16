@@ -8,8 +8,9 @@ publish = false
 
 # common (desktop / linux) features
 [dependencies]
-bevy_ecs = "0.18.0"
-bevy_gizmos = "0.18.0"
+bevy_ecs = { path = "../bevy/crates/bevy_ecs" }
+bevy_gizmos = { path = "../bevy/crates/bevy_gizmos" }
+bevy_image = { path = "../bevy/crates/bevy_image", features = ["jpeg"] }
 bevy_mod_openxr = { version = "0.5.0", features = [
     "window_support",
     "fb_passthrough",
@@ -21,26 +22,11 @@ schminput = { version = "0.5.0", features = ["xr"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 audio = "0.2.1"
-bevy = {version = "0.18.0" }
+bevy = { path = "../bevy" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 # Android-only features (won't be compiled on Linux)
-bevy = { version = "0.18", default-features = false, features = [
-    "android-native-activity",
-    "android_shared_stdcxx",
-    "default_app",
-    "std",
-    "default_font",
-    "multi_threaded",
-    "sysinfo_plugin",
-    "2d_bevy_render",
-    "scene",
-    "audio",
-    "picking",
-    "3d_bevy_render",
-    "ui_api",
-    "ui_bevy_render",
-] }
+bevy = { path = "../bevy", features = ["android-native-activity"] }
 
 [build-dependencies]
 reqwest = { version = "0.12", features = ["blocking"] }
@@ -48,7 +34,7 @@ zip = "2.1"
 
 [lib]
 name="my_bevy_start"
-crate-type = ["rlib", "cdylib"]
+crate-type = ["lib", "cdylib"]
 
 #[[bin]]
 #path="src/lib.rs"
@@ -67,6 +53,7 @@ label = "My Bevy start"
 strip = "strip"
 
 [package.metadata.android.sdk]
+min_sdk_version = 26
 target_sdk_version = 36
 
 [package.metadata.android.application.activity]

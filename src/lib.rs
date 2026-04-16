@@ -13,7 +13,7 @@ use std::{f32::consts::FRAC_PI_4, ops::DerefMut};
 use bevy_mod_openxr::session::OxrSession;
 
 use bevy::{
-    color::palettes::css::{self, WHITE}, light::{CascadeShadowConfigBuilder, DirectionalLight}, prelude::*, render::view::NoIndirectDrawing, scene::SceneInstanceReady
+    color::palettes::css::{self, WHITE}, light::{CascadeShadowConfigBuilder, DirectionalLight, DirectionalLightShadowMap}, prelude::*, render::view::NoIndirectDrawing, time::Time 
 };
 use bevy_mod_openxr::{
     add_xr_plugins,
@@ -80,6 +80,7 @@ pub const HP_MIXED_REALITY_PROFILE: &str = "/interaction_profiles/htc/mixed_real
 #[bevy_main]
 fn main() {
     App::new()
+        .insert_resource(DirectionalLightShadowMap { size: 4096 })
         .add_plugins(add_xr_plugins(DefaultPlugins).set(OxrInitPlugin {
             exts: {
                 let mut exts = OxrExtensions::default();
@@ -104,6 +105,7 @@ fn main() {
         .add_systems(Update, snap_turn_system)
         .add_systems(Update, animate_light_direction)
         .add_systems(Update, spawn_new_scene)
+        .add_systems(Update, play_animation_when_ready)
         .insert_resource(ClearColor(Color::NONE))
         .insert_resource(TurnState::default())
         // .init_asset::<AudioSource>()
@@ -145,18 +147,40 @@ struct HeadsetView;
 
 fn create_view_space(
     session: Res<OxrSession>, 
-    mut commands: Commands
+    mut commands: Commands,
 ) {
     let space = session.create_reference_space(openxr::ReferenceSpaceType::VIEW, Isometry3d::IDENTITY).unwrap();
     // get the XrSpace out of the XrReferenceSpace
     commands.spawn((HeadsetView,space.0));
 }
 
-fn setup_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_assets(
+    mut commands: Commands, 
+    asset_server: Res<AssetServer>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+) {
     let mut elements = vec![];
     for asset in ASSET_ELEMENTS {
         info!("Loading asset: {}", asset.file_name);
-        elements.push(AssetElement { asset: asset_server.load(GltfAssetLabel::Scene(0).from_asset(asset.file_name)) });
+
+        let scene = asset_server.load::<WorldAsset>(
+            GltfAssetLabel::Scene(0).from_asset(asset.file_name),
+        );
+
+        let (graph, index) = AnimationGraph::from_clip(
+            asset_server.load(
+                GltfAssetLabel::Animation(0).from_asset(asset.file_name),
+            ),
+        );
+
+        let graph_handle = graphs.add(graph);
+
+
+        elements.push(AssetElement {
+            scene,
+            graph: graph_handle,
+            index,
+        });
     }
     commands.insert_resource(AssetElementList { elements });
     info!("gltf elements loaded!");
@@ -164,54 +188,17 @@ fn setup_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 fn setup_mesh_and_animation(
     mut commands: Commands,
-    asset_elements: Res<AssetElementList>,
-    asset_server: Res<AssetServer>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
-    // mut meshes: ResMut<Assets<Mesh>>,
-    // mut materials: ResMut<Assets<StandardMaterial>>,
+    assets: Res<AssetElementList>,
 ) {
-    // let gap = 4.0; // space between two ears
+    let element = &assets.elements[0];
 
-    if let Some(handle) = asset_elements.get_by_index(0) {
-        let (graph, index) = AnimationGraph::from_clip(
-            asset_server.load(GltfAssetLabel::Animation(0).from_asset(ASSET_ELEMENTS[0].file_name)),
-        );
-
-        // Store the animation graph as an asset.
-        let graph_handle = graphs.add(graph);
-        let animation_to_play = AnimationToPlay {
-            graph_handle,
-            index,
-        };
-        let mesh_scene = SceneRoot(handle.clone());
-        let _entity = commands.spawn((
-            animation_to_play,
-            mesh_scene,
-            // Emitter::default(),
-            // bevy_audio::AudioPlayer::new(asset_server.load("laser.wav")),
-            // bevy_audio::PlaybackSettings::LOOP.with_spatial(true),
-        )).observe(play_animation_when_ready).id();
-    }
-    // let listener = bevy_audio::SpatialListener::new(gap);
-    // commands.spawn((
-    //     Transform::default(),
-    //     Visibility::default(),
-    //     listener.clone(),
-    //     children![
-    //         // left ear indicator
-    //         (
-    //             Mesh3d(meshes.add(Cuboid::new(0.2, 0.2, 0.2))),
-    //             MeshMaterial3d(materials.add(Color::from(RED))),
-    //             Transform::from_translation(listener.left_ear_offset),
-    //         ),
-    //         // right ear indicator
-    //         (
-    //             Mesh3d(meshes.add(Cuboid::new(0.2, 0.2, 0.2))),
-    //             MeshMaterial3d(materials.add(Color::from(LIME))),
-    //             Transform::from_translation(listener.right_ear_offset),
-    //         )
-    //     ],
-    // ));
+    commands.spawn((
+        WorldAssetRoot(element.scene.clone()),
+        AnimationToPlay {
+            graph_handle: element.graph.clone(),
+            index: element.index,
+        },
+    ));
 }
 
 // fn update_positions(
@@ -359,8 +346,8 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("hand_left_pose", "Left Hand Pose", pose_set),
             OxrBindings::new()
-                .bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/grip/pose"])
-                .bindings(HP_MIXED_REALITY_PROFILE, ["/user/hand/left/input/grip/pose"]),
+                .bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/left/input/aim/pose"])
+                .bindings(HP_MIXED_REALITY_PROFILE, ["/user/hand/left/input/aim/pose"]),
             AttachSpaceToEntity(left_hand),
             SpaceActionValue::new(),
         ))
@@ -369,8 +356,8 @@ fn setup2(mut cmds: Commands) {
         .spawn((
             Action::new("hand_right_pose", "Right Hand Pose", pose_set),
             OxrBindings::new()
-                .bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/grip/pose"])
-                .bindings(HP_MIXED_REALITY_PROFILE, ["/user/hand/right/input/grip/pose"]),
+                .bindings(OCULUS_TOUCH_PROFILE, ["/user/hand/right/input/aim/pose"])
+                .bindings(HP_MIXED_REALITY_PROFILE, ["/user/hand/right/input/aim/pose"]),
             AttachSpaceToEntity(right_hand),
             SpaceActionValue::new(),
         ))
@@ -404,7 +391,7 @@ fn setup(
 ) {
     commands.spawn((
         DirectionalLight {
-            shadows_enabled: true,
+            //shadows_enabled: true,
             ..default()
         },
         // This is a relatively small scene, so use tighter shadow
@@ -452,7 +439,7 @@ fn update_morph_targets(
 
 fn spawn_new_scene(
     mut commands: Commands,
-    query: Query<Entity, With<SceneRoot>>,
+    query: Query<Entity, With<WorldAssetRoot>>,
     assets: Res<AssetElementList>,
     mut move_actions: ResMut<MoveActions>,
     bool_value: Query<&BoolActionValue>,
@@ -478,15 +465,18 @@ fn spawn_new_scene(
         commands.entity(entity).despawn();
     }
     // Function to spawn a new scene if needed
-    if let Some(handle) = assets.get_by_index(move_actions.shown_scene) {
-        let _entity = commands.spawn((
-            Transform::from_xyz(0.0, 0.0, 0.0),
-            SceneRoot(handle.clone(),
-        )
-        )).id();
-    } else {
-        info!("No asset found for index {}", move_actions.shown_scene);
-    }
+    let index = move_actions.shown_scene;
+    info!("Spawning new scene index {}", index);
+
+    let element = &assets.elements[index];
+
+    commands.spawn((
+        WorldAssetRoot(element.scene.clone()),
+        AnimationToPlay {
+            graph_handle: element.graph.clone(),
+            index: element.index,
+        },
+    ));
 }
 
 fn animate_light_direction(
@@ -505,33 +495,27 @@ fn animate_light_direction(
 // is called when the scene is loaded
 // this is where we play the animation (head nodding)
 fn play_animation_when_ready(
-    trigger: On<SceneInstanceReady>,
     mut commands: Commands,
-    children: Query<&Children>,
-    animations_to_play: Query<&AnimationToPlay>,
-    mut players: Query<&mut AnimationPlayer>,
+    mut players: Query<(Entity, &mut AnimationPlayer), Added<AnimationPlayer>>,
+    roots: Query<&AnimationToPlay>,
+    parents: Query<&ChildOf>,
 ) {
-    // The entity we spawned in `setup_mesh_and_animation` is the trigger's target.
-    // Start by finding the AnimationToPlay component we added to that entity.
-    if let Ok(animation_to_play) = animations_to_play.get(trigger.entity) {
-        // The SceneRoot component will have spawned the scene as a hierarchy
-        // of entities parented to our entity. Since the asset contained a skinned
-        // mesh and animations, it will also have spawned an animation player
-        // component. Search our entity's descendants to find the animation player.
-        for child in children.iter_descendants(trigger.entity) {
-            if let Ok(mut player) = players.get_mut(child) {
-                // Tell the animation player to start the animation and keep
-                // repeating it.
-                //
-                // If you want to try stopping and switching animations, see the
-                // `animated_mesh_control.rs` example.
-                player.play(animation_to_play.index).repeat();
+    for (entity, mut player) in &mut players {
+        let mut current = entity;
+        loop {
+            if let Ok(animation) = roots.get(current) {
+                commands.entity(entity).insert(
+                    AnimationGraphHandle(animation.graph_handle.clone())
+                );
+                player.play(animation.index).repeat();
+                break;
+            }
 
-                // Add the animation graph. This only needs to be done once to
-                // connect the animation player to the mesh.
-                commands
-                    .entity(child)
-                    .insert(AnimationGraphHandle(animation_to_play.graph_handle.clone()));
+            if let Ok(parent) = parents.get(current) {
+                current = parent.parent();
+            } else {
+                info!("No AnimationToPlay found in hierarchy!");
+                break;
             }
         }
     }

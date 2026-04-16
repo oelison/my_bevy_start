@@ -1,6 +1,7 @@
+use bevy::animation::graph::{AnimationGraph, AnimationNodeIndex};
 use bevy::asset::Handle;
 use bevy::ecs::resource::Resource;
-use bevy::scene::Scene;
+use bevy::world_serialization::WorldAsset;
 
 const SIMPLE_HUMAN_RIG: &str = "simpleHumanRig.glb";
 const SIMPLE_WALL: &str = "simpleWall.glb";
@@ -22,7 +23,9 @@ pub static ASSET_ELEMENTS: &[AssetElementFile] = &[
 
 #[derive(Clone)]
 pub struct AssetElement {
-    pub asset: Handle<Scene>,
+    pub scene: Handle<WorldAsset>,
+    pub graph: Handle<AnimationGraph>,
+    pub index: AnimationNodeIndex,
 }
 
 #[derive(Resource)]
@@ -30,8 +33,8 @@ pub struct AssetElementList {
     pub elements: Vec<AssetElement>,
 }
 
-impl AssetElementList {
-    pub fn get_by_index(&self, index: usize) -> Option<&Handle<Scene>> {
-        self.elements.get(index).map(|e| &e.asset)
-    }
-}
+// impl AssetElementList {
+//     pub fn get_by_index(&self, index: usize) -> Option<&AssetElement> {
+//         self.elements.get(index)
+//     }
+// }
