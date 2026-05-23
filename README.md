@@ -41,3 +41,11 @@ adb install -r target/debug/apk/my_bevy_start.apk
 adb logcat | grep my_bevy_start
 ```
 
+## ndk build
+
+```
+cargo ndk -t arm64-v8a -P 30 -o android_native/app/src/main/jniLibs build
+cp runtime_libs/arm64-v8a/libopenxr_loader.so android_native/app/src/main/jniLibs/arm64-v8a/
+cd android_native
+./gradlew installDebug
+```

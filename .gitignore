@@ -1,2 +1,5 @@
 /target
 /runtime_libs
+android_native/.gradle
+android_native/app/build
+android_native/app/src/main/jniLibs
